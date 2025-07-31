@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>显眼包</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+
+    .container {
+      padding: 10px;
+      margin-bottom: 60px;
+    }
+
+    .storage-info {
+      background-color: #fff;
+      padding: 10px;
+      margin-bottom: 10px;
+      border-radius: 5px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .gif-table {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .gif-item {
+      background-color: #fff;
+      border-radius: 5px;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .gif-selected {
+      border: 3px solid green;
+    }
+
+    .gif-image {
+      width: 64px;
+      height: 64px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+
+    .gif-size-text {
+      font-size: 10px;
+      color: #3e3e3e;
+    }
+
+    .gif-buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .btn {
+      padding: 5px 10px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .btn-show {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    .btn-delete {
+      background-color: #f44336;
+      color: white;
+    }
+
+    .btn:disabled {
+      background-color: #3e3e3e;
+      color: white;
+    }
+
+    .footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background-color: #fff;
+      padding: 10px;
+      display: flex;
+      justify-content: space-around;
+      box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .footer-btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background-color: #2196F3;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 5px;
+      max-width: 80%;
+      max-height: 80%;
+      overflow: auto;
+    }
+
+    .close {
+      color: #666;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .settings-form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group label {
+      font-weight: bold;
+    }
+
+    .form-group input {
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+    }
+
+    .enlarged-gif {
+      margin-top: 30px;
+      width: 300px;
+      height: 300px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="storage-info">
+      <p>存储状态: <span id="storage-used">0</span> / <span id="storage-total">0</span></p>
+    </div>
+
+    <div class="storage-info">
+      <button class="footer-btn" style="width: 100%;" id="toggle-btn" onclick="handle_display_btn()">loading</button>
+    </div>
+
+    <div class="gif-table" id="gif-container">
+      <!-- GIF 项目将通过 JavaScript 动态添加 -->
+    </div>
+  </div>
+
+  <div class="footer">
+    <button class="footer-btn" id="upload-btn">上传</button>
+    <button class="footer-btn" id="settings-btn">设置</button>
+  </div>
+
+  <!-- 放大显示 GIF 的模态框 -->
+  <div class="modal" id="gif-modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <img id="enlarged-gif" class="enlarged-gif" src="" alt="gif">
+    </div>
+  </div>
+
+  <!-- 上传 GIF 的模态框 -->
+  <div class="modal" id="upload-modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>上传 GIF</h2>
+      <form id="upload-form">
+        <div class="form-group">
+          <label for="gif-file">选择 GIF 文件:</label>
+          <input type="file" id="gif-file" accept="image/gif" required>
+        </div>
+        <button type="submit" class="footer-btn">上传</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 设置的模态框 -->
+  <div class="modal" id="settings-modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2>设置</h2>
+      <form id="settings-form" class="settings-form">
+        <div class="form-group">
+          <label for="wifi-name">WiFi 名称:</label>
+          <input type="text" id="wifi-name" minlength="3" maxlength="16" required>
+        </div>
+        <div class="form-group">
+          <label for="wifi-password">WiFi 密码:</label>
+          <input type="text" id="wifi-password" minlength="8" maxlength="16" required>
+        </div>
+        <div class="form-group">
+          <label for="brightness">亮度: <span id="brightness-value">50</span>%</label>
+          <input type="range" id="brightness" min="0" max="100" value="50">
+        </div>
+        <button type="submit" class="footer-btn">保存设置</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let gifs = [];
+    let storage = {
+      used: -1,
+      total: -1
+    };
+    let config = {
+      bright: 0,
+      enable_display: true,
+      wifi_ssid: "",
+      wifi_pwd: "",
+      display_filename: "",
+    };
+
+    function getConfigFromStr(config_str) {
+      new_config = {
+        bright: config_str[0].charCodeAt(0) - 1,
+        enable_display: Boolean(config_str[1].charCodeAt(0) - 1),
+        wifi_ssid: "",
+        wifi_pwd: "",
+        display_filename: ""
+      };
+      let cur_pos = 5;
+      let len = config_str[2].charCodeAt(0) - 1;
+      new_config.wifi_ssid = config_str.substring(cur_pos, cur_pos + len);
+      cur_pos += len;
+      len = config_str[3].charCodeAt(0) - 1;
+      new_config.wifi_pwd = config_str.substring(cur_pos, cur_pos + len);
+      cur_pos += len;
+      len = config_str[4].charCodeAt(0) - 1;
+      new_config.display_filename = config_str.substring(cur_pos, cur_pos + len);
+      return new_config;
+    }
+
+    function getStrFromConfig(new_config) {
+      let ret = "";
+      ret += String.fromCharCode(new_config.bright + 1);
+      ret += String.fromCharCode(Number(new_config.enable_display) + 1);
+      ret += String.fromCharCode(new_config.wifi_ssid.length + 1);
+      ret += String.fromCharCode(new_config.wifi_pwd.length + 1);
+      ret += String.fromCharCode(new_config.display_filename.length + 1);
+      ret += new_config.wifi_ssid;
+      ret += new_config.wifi_pwd;
+      ret += new_config.display_filename;
+      return ret;
+    }
+
+    function updateConfig(new_config) {
+      config.bright = new_config.bright;
+      config.enable_display = new_config.enable_display;
+      config.wifi_ssid = new_config.wifi_ssid;
+      config.wifi_pwd = new_config.wifi_pwd;
+      config.display_filename = new_config.display_filename;
+    }
+
+    function updateGif(data) {
+      storage.used = data['u'];
+      storage.total = data['t'];
+      gifs = [];
+      data['fl'].forEach(f => {
+        gifs.push({ name: f['nm'], size: f['sz'] });
+      });
+    }
+
+    function fetchFilelist(cb = null) {
+      fetch("/filelist", { method: 'POST' })
+        .then(response => {
+          if (response.ok) {
+            return response.json();
+          }
+          throw new Error('error on fetch filelist');
+        }).then(data => {
+          updateGif(data);
+          if (cb != null) {
+            cb();
+          }
+        }).catch(err => { alert(String(err)); });
+    }
+
+    function uploadGif(gif_file, cb = null) {
+      let formData = new FormData();
+      formData.append("data", gif_file);
+      fetch('/upload', { method: 'POST', body: formData })
+        .then(response => {
+          if (response.ok) {
+            return response.text();
+          }
+          throw new Error('error on fetch filelist');
+        }).then(data => {
+          if (cb != null) {
+            cb();
+          }
+        }).catch(err => { alert(String(err)); });
+    }
+
+    function fetConfig(cb = null, new_config = null) {
+      let send_msg;
+      if (new_config == null) {
+        send_msg = { method: 'POST' };
+      } else {
+        send_msg = { method: 'POST', body: getStrFromConfig(new_config) };
+      }
+      fetch("/config", send_msg)
+        .then(res => {
+          if (res.ok) {
+            return res.text();
+          }
+          throw new Error('error on fetch config');
+        }).then(config_str => {
+          let new_config = getConfigFromStr(config_str);
+          updateConfig(new_config);
+          if (cb != null) {
+            cb();
+          }
+        }).catch(err => { alert(String(err)); });
+    }
+
+    function delGif(gif_name, cb = null) {
+      fetch("/delete", { method: 'POST', body: gif_name })
+        .then(response => {
+          if (response.ok) {
+            return response.json();
+          }
+          throw new Error('error on fetch filelist');
+        }).then(data => {
+          updateGif(data);
+          if (cb != null) {
+            cb();
+          }
+        }).catch(err => { alert(String(err)); });
+    }
+
+    function getImgSrc(name) {
+      return "/gif?img=" + name;
+    }
+
+    function readableSize(bytes) {
+      if (bytes < 1024) {
+        return bytes + "B";
+      } else if (bytes < (1024 * 1024)) {
+        return (bytes / 1024.0).toFixed(2) + "KB";
+      } else if (bytes < (1024 * 1024 * 1024)) {
+        return (bytes / 1024.0 / 1024.0).toFixed(2) + "MB";
+      } else {
+        return (bytes / 1024.0 / 1024.0 / 1024.0).toFixed(2) + "GB";
+      }
+    }
+
+    function renderGifs() {
+      document.getElementById('storage-used').textContent = readableSize(storage.used);
+      document.getElementById('storage-total').textContent = readableSize(storage.total);
+      const container = document.getElementById('gif-container');
+      container.innerText = '';
+
+      gifs.forEach(gif => {
+        const gifItem = document.createElement('div');
+        gifItem.id = gif.name
+        gifItem.className = 'gif-item';
+        if (gif.name === config.display_filename) {
+          gifItem.className += ' gif-selected'
+        }
+
+        const gifImage = document.createElement('img');
+        gifImage.className = 'gif-image';
+        gifImage.src = getImgSrc(gif.name);
+        gifImage.onclick = () => showGifModal(gif.name);
+
+        const buttonsDiv = document.createElement('div');
+        buttonsDiv.className = 'gif-buttons';
+
+        const showButton = document.createElement('button');
+        showButton.className = 'btn btn-show';
+        showButton.textContent = '显示';
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'btn btn-delete';
+        deleteButton.textContent = '删除';
+        if (gif.name === config.display_filename) {
+          showButton.disabled = true;
+          deleteButton.disabled = true;
+        } else {
+          showButton.onclick = () => setDisplay(gif.name);
+          deleteButton.onclick = () => deleteGif(gif.name);
+        }
+
+        buttonsDiv.appendChild(showButton);
+        buttonsDiv.appendChild(deleteButton);
+
+        const fileSizeText = document.createElement('p');
+        fileSizeText.className = 'gif-size-text';
+        fileSizeText.textContent = readableSize(gif.size);
+        buttonsDiv.appendChild(fileSizeText);
+
+        gifItem.appendChild(gifImage);
+        gifItem.appendChild(buttonsDiv);
+
+        container.appendChild(gifItem);
+      });
+    }
+
+    function renderConfig() {
+      const toggle_btn = document.getElementById('toggle-btn');
+      if (config.enable_display) {
+        toggle_btn.textContent = "显示中；关闭";
+      } else {
+        toggle_btn.textContent = "已关闭；开始";
+      }
+      document.getElementById('brightness-value').textContent = '' + config.bright;
+      document.getElementById('brightness').value = config.bright;
+      document.getElementById('wifi-name').value = config.wifi_ssid;
+      document.getElementById('wifi-password').value = config.wifi_pwd;
+    }
+
+    function showGifModal(name) {
+      const modal = document.getElementById('gif-modal');
+      const enlargedGif = document.getElementById('enlarged-gif');
+      enlargedGif.src = getImgSrc(name);
+      modal.style.display = 'flex';
+    }
+
+    function setDisplay(name) {
+      fetConfig(function () {
+        renderGifs();
+      }, {
+        bright: config.bright,
+        enable_display: config.enable_display,
+        wifi_ssid: "",
+        wifi_pwd: "",
+        display_filename: name,
+      });
+    }
+
+    function deleteGif(name) {
+      delGif(name, function () {
+        renderGifs();
+      });
+    }
+
+    function handle_display_btn() {
+      fetConfig(function () {
+        renderConfig();
+      }, {
+        bright: config.bright,
+        enable_display: !config.enable_display,
+        wifi_ssid: "",
+        wifi_pwd: "",
+        display_filename: "",
+      });
+    }
+
+    function initModals() {
+      const modals = document.querySelectorAll('.modal');
+      const closeButtons = document.querySelectorAll('.close');
+
+      closeButtons.forEach(button => {
+        button.onclick = function () {
+          modals.forEach(modal => {
+            modal.style.display = 'none';
+          });
+        }
+      });
+
+      window.onclick = function (event) {
+        modals.forEach(modal => {
+          if (event.target === modal) {
+            modal.style.display = 'none';
+          }
+        });
+      }
+
+      document.getElementById('upload-btn').onclick = function () {
+        document.getElementById('upload-modal').style.display = 'flex';
+      }
+
+      document.getElementById('settings-btn').onclick = function () {
+        document.getElementById('settings-modal').style.display = 'flex';
+      }
+    }
+
+    document.getElementById('brightness').oninput = function () {
+      document.getElementById('brightness-value').textContent = this.value;
+    }
+
+    // 处理上传表单提交
+    document.getElementById('upload-form').onsubmit = function (e) {
+      e.preventDefault();
+      const fileInput = document.getElementById('gif-file');
+      if (fileInput.files.length > 0) {
+        let new_file_name = fileInput.files[0].name;
+        let found = false;
+        if (new_file_name.length > 16) {
+          alert("文件名太长,16个字母以下");
+          return;
+        }
+        gifs.forEach(gif => {
+          if (gif.name === new_file_name) {
+            found = true;
+          }
+        });
+        if (found) {
+          alert("文件已经存在,修改文件名重试");
+          return;
+        }
+        if (fileInput.files[0].size >= (storage.total - storage.used) * 0.95) {
+          alert("文件太大,空间不足");
+          return;
+        }
+        uploadGif(fileInput.files[0], function () {
+          fetchFilelist(function () {
+            fileInput.value = '';
+            renderGifs();
+            document.getElementById('upload-modal').style.display = 'none';
+          });
+        });
+      }
+    }
+
+    // 处理设置表单提交
+    document.getElementById('settings-form').onsubmit = function (e) {
+      e.preventDefault();
+      const wifiName = document.getElementById('wifi-name').value;
+      const wifiPassword = document.getElementById('wifi-password').value;
+      const brightness = parseInt(document.getElementById('brightness').value, 10);
+
+      fetConfig(function () {
+        renderConfig();
+        document.getElementById('settings-modal').style.display = 'none';
+      }, {
+        bright: brightness,
+        enable_display: config.enable_display,
+        wifi_ssid: wifiName,
+        wifi_pwd: wifiPassword,
+        display_filename: "",
+      });
+    }
+
+    // 初始化页面
+    function init() {
+      initModals();
+      fetConfig(function () {
+        renderConfig();
+        fetchFilelist(function () {
+          renderGifs();
+        });
+      }, null);
+    }
+
+    // 页面加载完成后初始化
+    window.onload = init;
+  </script>
+</body>
+
+</html>
