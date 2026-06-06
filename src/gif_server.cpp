@@ -248,15 +248,52 @@ void GifServer::handle_api_gifs() {
 }
 
 void GifServer::handle_api_songs() {
-  String path = lyric_basedir + "/index.json";
-  if (!exists(path)) {
+  if (!exists(lyric_index_file)) {
     server_.send(200, "application/json", "[]");
     return;
   }
 
-  File file = SPIFFS.open(path, "r");
-  server_.streamFile(file, "application/json");
-  file.close();
+  String query = server_.arg("q");
+  query.toLowerCase();
+  int limit = server_.hasArg("limit") ? server_.arg("limit").toInt() : 40;
+  limit = std::max(1, std::min(80, limit));
+
+  File index = SPIFFS.open(lyric_index_file, "r");
+  String output = "[";
+  bool is_first = true;
+  int emitted = 0;
+  while (index.available() && emitted < limit) {
+    String line = index.readStringUntil('\n');
+    line.trim();
+    const int first_tab = line.indexOf('\t');
+    const int second_tab = line.indexOf('\t', first_tab + 1);
+    const int third_tab = line.indexOf('\t', second_tab + 1);
+    if (first_tab < 0 || second_tab < 0 || third_tab < 0) {
+      continue;
+    }
+
+    const String filename = line.substring(0, first_tab);
+    const String title = line.substring(third_tab + 1);
+    String searchable = filename + " " + title;
+    searchable.toLowerCase();
+    if (query.length() > 0 && searchable.indexOf(query) < 0) {
+      continue;
+    }
+
+    if (!is_first) {
+      output += ",";
+    }
+    output += "{\"file\":\"";
+    output += json_escape(filename);
+    output += "\",\"title\":\"";
+    output += json_escape(title);
+    output += "\",\"artist\":\"五月天\"}";
+    is_first = false;
+    emitted++;
+  }
+  index.close();
+  output += "]";
+  server_.send(200, "application/json", output);
 }
 
 void GifServer::handle_api_lyric() {

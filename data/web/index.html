@@ -450,7 +450,9 @@
       playBaseMs: 0,
       raf: 0,
       saveTimer: 0,
+      searchTimer: 0,
       activeLine: -1,
+      requestQueue: Promise.resolve(),
     };
 
     const els = {
@@ -512,7 +514,12 @@
     });
     els.playToggle.addEventListener('click', togglePreview);
     els.syncProgress.addEventListener('click', () => syncProgress(state.currentMs));
-    els.songSearch.addEventListener('input', renderSongs);
+    els.songSearch.addEventListener('input', () => {
+      clearTimeout(state.searchTimer);
+      state.searchTimer = setTimeout(() => {
+        refreshSongs(els.songSearch.value).then(renderSongs).catch((err) => alert(String(err)));
+      }, 260);
+    });
 
     window.addEventListener('load', init);
 
@@ -541,8 +548,11 @@
       els.storageLabel.textContent = `${readableSize(data.used || 0)} / ${readableSize(data.total || 0)}`;
     }
 
-    async function refreshSongs() {
-      state.songs = await fetchJson('/api/songs');
+    async function refreshSongs(query = '') {
+      const params = new URLSearchParams();
+      params.set('limit', '40');
+      if (query.trim()) params.set('q', query.trim());
+      state.songs = await fetchJson(`/api/songs?${params}`);
     }
 
     async function loadFont() {
@@ -717,32 +727,23 @@
       for (const gif of state.gifs) {
         const item = document.createElement('button');
         item.className = `gif-item${gif.name === state.device.gif ? ' active' : ''}`;
-        const img = document.createElement('img');
-        img.src = `/gif?img=${encodeURIComponent(gif.name)}`;
-        img.alt = gif.name;
         const name = document.createElement('strong');
         name.textContent = gif.name;
         const size = document.createElement('small');
         size.textContent = readableSize(gif.size || 0);
-        item.append(img, name, size);
+        item.append(name, size);
         item.onclick = () => selectGif(gif.name);
         els.gifList.append(item);
       }
     }
 
     function renderSongs() {
-      const keyword = els.songSearch.value.trim().toLowerCase();
-      const filtered = state.songs.filter((song) => {
-        if (!keyword) return true;
-        return `${song.title || ''} ${song.artist || ''} ${song.file || ''}`.toLowerCase().includes(keyword);
-      });
-
       els.songList.innerHTML = '';
-      if (!filtered.length) {
+      if (!state.songs.length) {
         els.songList.innerHTML = '<div class="empty">没有匹配歌曲</div>';
         return;
       }
-      for (const song of filtered) {
+      for (const song of state.songs) {
         const item = document.createElement('button');
         item.className = `song-item${song.file === state.device.song ? ' active' : ''}`;
         const title = document.createElement('strong');
@@ -915,21 +916,43 @@
     }
 
     async function fetchJson(url, options) {
-      const res = await fetch(url, options);
-      if (!res.ok) throw new Error(`${url} ${res.status}`);
-      return res.json();
+      return enqueueRequest(async () => {
+        const res = await fetch(url, options);
+        if (!res.ok) throw new Error(`${url} ${res.status}`);
+        const payload = await res.json();
+        await sleep(80);
+        return payload;
+      });
     }
 
     async function fetchText(url) {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`${url} ${res.status}`);
-      return res.text();
+      return enqueueRequest(async () => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`${url} ${res.status}`);
+        const payload = await res.text();
+        await sleep(80);
+        return payload;
+      });
     }
 
     async function fetchArrayBuffer(url) {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`${url} ${res.status}`);
-      return res.arrayBuffer();
+      return enqueueRequest(async () => {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`${url} ${res.status}`);
+        const payload = await res.arrayBuffer();
+        await sleep(80);
+        return payload;
+      });
+    }
+
+    function enqueueRequest(fn) {
+      const request = state.requestQueue.catch(() => undefined).then(fn);
+      state.requestQueue = request.then(() => undefined, () => undefined);
+      return request;
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
     }
   </script>
 </body>
