@@ -389,12 +389,7 @@ void BleControl::flush_batch(String& batch) {
     return;
   }
   state_characteristic_->setValue(batch.c_str());
-  bool sent = state_characteristic_->notify();
-  if (!sent) {
-    delay(50);
-    state_characteristic_->setValue(batch.c_str());
-    state_characteristic_->notify();
-  }
+  state_characteristic_->notify();
   delay(kNotifyChunkDelayMs);
   batch = "";
 }
@@ -545,13 +540,8 @@ void BleControl::notify_line(const String& line) {
     const int chunk_len = std::min<int>(kNotifyChunkSize, payload.length() - offset);
     const String chunk = payload.substring(offset, offset + chunk_len);
     state_characteristic_->setValue(chunk.c_str());
-    bool sent = state_characteristic_->notify();
+    state_characteristic_->notify();
     offset += chunk_len;
-    if (!sent) {
-      delay(50);
-      state_characteristic_->setValue(chunk.c_str());
-      state_characteristic_->notify();
-    }
     delay(kNotifyChunkDelayMs);
   }
   state_characteristic_->setValue(line.c_str());
