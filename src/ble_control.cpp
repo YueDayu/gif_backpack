@@ -13,6 +13,7 @@ constexpr char kDeviceName[] = "gif_backpack";
 constexpr char kServiceUuid[] = "6f8c0001-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr char kCommandUuid[] = "6f8c0002-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr char kStateUuid[] = "6f8c0003-5d2f-4e3c-9f7a-7a1f2e8b0001";
+constexpr uint32_t kPairingPasskey = 260606;
 constexpr size_t kMaxCommandBuffer = 512;
 constexpr size_t kNotifyChunkSize = 20;
 constexpr uint32_t kNotifyChunkDelayMs = 15;
@@ -48,15 +49,20 @@ bool BleControl::begin(std::function<void()> reload_callback) {
 
   NimBLEDevice::init(kDeviceName);
   NimBLEDevice::setMTU(185);
+  NimBLEDevice::setSecurityAuth(true, true, true);
+  NimBLEDevice::setSecurityPasskey(kPairingPasskey);
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
 
   NimBLEServer* server = NimBLEDevice::createServer();
   NimBLEService* service = server->createService(kServiceUuid);
   NimBLECharacteristic* command_characteristic = service->createCharacteristic(
       kCommandUuid,
-      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
+          NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
   state_characteristic_ = service->createCharacteristic(
       kStateUuid,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
+          NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
 
   command_characteristic->setCallbacks(new CommandCallbacks(this));
   state_characteristic_->setValue(build_state_line().c_str());
@@ -64,6 +70,10 @@ bool BleControl::begin(std::function<void()> reload_callback) {
   service->start();
   NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
   advertising->addServiceUUID(kServiceUuid);
+
+  NimBLEAdvertisementData scan_response;
+  scan_response.setName(kDeviceName);
+  advertising->setScanResponseData(scan_response);
   advertising->setScanResponse(true);
   NimBLEDevice::startAdvertising();
   return true;
