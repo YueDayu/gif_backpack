@@ -93,7 +93,7 @@ void BleControl::append_command_fragment(const String& fragment) {
   command_buffer_ += fragment;
   if (command_buffer_.length() > kMaxCommandBuffer) {
     command_buffer_ = "";
-    notify_line("ERR command_too_long");
+    enqueue_command("ERR command_too_long");
     return;
   }
 
@@ -103,13 +103,38 @@ void BleControl::append_command_fragment(const String& fragment) {
     command_buffer_.remove(0, newline + 1);
     command.trim();
     if (command.length() > 0) {
-      handle_command(command);
+      enqueue_command(command);
     }
     newline = command_buffer_.indexOf('\n');
   }
 }
 
+void BleControl::update() {
+  String command;
+  portENTER_CRITICAL(&command_queue_mux_);
+  if (!pending_commands_.empty()) {
+    command = pending_commands_.front();
+    pending_commands_.erase(pending_commands_.begin());
+  }
+  portEXIT_CRITICAL(&command_queue_mux_);
+
+  if (command.length() > 0) {
+    handle_command(command);
+  }
+}
+
+void BleControl::enqueue_command(const String& command) {
+  portENTER_CRITICAL(&command_queue_mux_);
+  pending_commands_.push_back(command);
+  portEXIT_CRITICAL(&command_queue_mux_);
+}
+
 void BleControl::handle_command(const String& command) {
+  if (command.startsWith("ERR ")) {
+    notify_line(command);
+    return;
+  }
+  Serial.println(String("BLE command: ") + command);
   if (command == "STATE?") {
     notify_state();
     return;
@@ -386,6 +411,7 @@ void BleControl::handle_gif_list_request() {
     file = root.openNextFile();
   }
   root.close();
+  Serial.println(String("BLE gifs count: ") + count);
   notify_line("GIFS_END count=" + String(count));
 }
 
@@ -416,6 +442,7 @@ void BleControl::handle_song_list_request() {
     count++;
   }
   index.close();
+  Serial.println(String("BLE songs count: ") + count);
   notify_line("SONGS_END count=" + String(count));
 }
 

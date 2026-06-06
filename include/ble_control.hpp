@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/portmacro.h>
 
 #include <functional>
 #include <vector>
@@ -11,10 +13,12 @@ class NimBLECharacteristic;
 class BleControl {
  public:
   bool begin(std::function<void()> reload_callback);
+  void update();
   void notify_state();
   void append_command_fragment(const String& fragment);
 
  private:
+  void enqueue_command(const String& command);
   void handle_command(const String& command);
   void handle_set_command(const String& args);
   void handle_upload_begin(const String& args);
@@ -36,7 +40,9 @@ class BleControl {
 
   std::function<void()> reload_callback_ = nullptr;
   NimBLECharacteristic* state_characteristic_ = nullptr;
+  portMUX_TYPE command_queue_mux_ = portMUX_INITIALIZER_UNLOCKED;
   String command_buffer_;
+  std::vector<String> pending_commands_;
   File upload_file_;
   String upload_filename_;
   uint32_t upload_expected_size_ = 0;

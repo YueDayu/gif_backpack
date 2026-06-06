@@ -23,4 +23,7 @@ void setup() {
   });
 }
 
-void loop() { GifPlayer::instance().update(); }
+void loop() {
+  ble_control.update();
+  GifPlayer::instance().update();
+}
