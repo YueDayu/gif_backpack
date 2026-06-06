@@ -20,6 +20,7 @@ constexpr uint32_t kSecuritySchemaVersion = 2;
 constexpr size_t kMaxCommandBuffer = 512;
 constexpr size_t kNotifyChunkSize = 20;
 constexpr uint32_t kNotifyChunkDelayMs = 15;
+constexpr char kLyricIndexFile[] = "/lyrics/index.txt";
 
 class CommandCallbacks : public NimBLECharacteristicCallbacks {
  public:
@@ -113,6 +114,14 @@ void BleControl::handle_command(const String& command) {
     notify_state();
     return;
   }
+  if (command == "SONGS?") {
+    handle_song_list_request();
+    return;
+  }
+  if (command.startsWith("LYRIC? ")) {
+    handle_lyric_request(command.substring(7));
+    return;
+  }
   if (command.startsWith("SET ")) {
     handle_set_command(command.substring(4));
     return;
@@ -131,26 +140,6 @@ void BleControl::handle_command(const String& command) {
   }
   if (command == "UPLOAD_ABORT") {
     handle_upload_abort();
-    return;
-  }
-  if (command.startsWith("LYRIC_BEGIN ")) {
-    handle_lyric_begin(command.substring(12));
-    return;
-  }
-  if (command.startsWith("LYRIC_LINE ")) {
-    handle_lyric_line(command.substring(11));
-    return;
-  }
-  if (command.startsWith("LYRIC_END ")) {
-    handle_lyric_end(command.substring(10));
-    return;
-  }
-  if (command == "LYRIC_END") {
-    handle_lyric_end("");
-    return;
-  }
-  if (command == "LYRIC_ABORT") {
-    handle_lyric_abort();
     return;
   }
   notify_line("ERR unknown_command");
@@ -365,36 +354,64 @@ void BleControl::handle_upload_abort() {
   upload_received_size_ = 0;
 }
 
-void BleControl::handle_lyric_begin(const String& args) {
-  const String filename = arg_value(args, "file");
-  LyricPlayer::instance().begin_runtime_song(filename.length() ? filename : "-");
-  notify_line("LYRIC_READY file=" + (filename.length() ? filename : "-"));
-}
-
-void BleControl::handle_lyric_line(const String& args) {
-  const uint32_t time_ms = uint32_t(std::max<long>(0, arg_value(args, "time").toInt()));
-  const String text = arg_value(args, "text");
-  if (!LyricPlayer::instance().append_runtime_line(time_ms, text)) {
-    notify_line("ERR lyric_bad_line");
-  }
-}
-
-void BleControl::handle_lyric_end(const String& args) {
-  uint32_t progress_ms = LyricPlayer::instance().current_progress_ms();
-  const String value = arg_value(args, "progress");
-  if (value.length() > 0) {
-    progress_ms = uint32_t(std::max<long>(0, value.toInt()));
-  }
-  if (!LyricPlayer::instance().finish_runtime_song(progress_ms)) {
-    notify_line("ERR lyric_empty");
+void BleControl::handle_song_list_request() {
+  File index = SPIFFS.open(kLyricIndexFile, "r");
+  if (!index) {
+    notify_line("ERR songs_index_missing");
     return;
   }
-  notify_state();
+
+  notify_line("SONGS_BEGIN");
+  size_t count = 0;
+  while (index.available()) {
+    String line = index.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) {
+      continue;
+    }
+    const int first_tab = line.indexOf('\t');
+    const int second_tab = line.indexOf('\t', first_tab + 1);
+    const int third_tab = line.indexOf('\t', second_tab + 1);
+    if (first_tab < 0 || second_tab < 0 || third_tab < 0) {
+      continue;
+    }
+    const String filename = line.substring(0, first_tab);
+    const String title = line.substring(third_tab + 1);
+    notify_line("SONG file=" + url_encode(filename) + "&title=" + url_encode(title));
+    count++;
+  }
+  index.close();
+  notify_line("SONGS_END count=" + String(count));
 }
 
-void BleControl::handle_lyric_abort() {
-  LyricPlayer::instance().abort_runtime_song();
-  notify_line("LYRIC_ABORTED");
+void BleControl::handle_lyric_request(const String& args) {
+  const String filename = arg_value(args, "file");
+  if (filename.length() == 0 || filename == "-") {
+    notify_line("ERR lyric_bad_file");
+    return;
+  }
+
+  String text;
+  if (!LyricPlayer::instance().get_song_text(filename, text)) {
+    notify_line("ERR lyric_read_failed file=" + url_encode(filename));
+    return;
+  }
+
+  notify_line("LYRIC_BEGIN file=" + url_encode(filename));
+  int pos = 0;
+  while (pos < text.length()) {
+    int next_newline = text.indexOf('\n', pos);
+    if (next_newline < 0) {
+      next_newline = text.length();
+    }
+    String line = text.substring(pos, next_newline);
+    line.trim();
+    if (line.length() > 0) {
+      notify_line("LYRIC_TEXT line=" + url_encode(line));
+    }
+    pos = next_newline + 1;
+  }
+  notify_line("LYRIC_END file=" + url_encode(filename));
 }
 
 void BleControl::notify_state() {
@@ -489,6 +506,26 @@ String BleControl::sanitize_gif_filename(const String& value) {
   }
   if (output.length() > 48) {
     output = output.substring(output.length() - 48);
+  }
+  return output;
+}
+
+String BleControl::url_encode(const String& value) {
+  String output;
+  output.reserve(value.length());
+  const char* hex = "0123456789ABCDEF";
+  for (int i = 0; i < value.length(); ++i) {
+    const uint8_t c = static_cast<uint8_t>(value[i]);
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~') {
+      output += char(c);
+    } else if (c == ' ') {
+      output += '+';
+    } else {
+      output += '%';
+      output += hex[c >> 4];
+      output += hex[c & 0x0f];
+    }
   }
   return output;
 }

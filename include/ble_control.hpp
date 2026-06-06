@@ -21,15 +21,14 @@ class BleControl {
   void handle_upload_data(const String& args);
   void handle_upload_end();
   void handle_upload_abort();
-  void handle_lyric_begin(const String& args);
-  void handle_lyric_line(const String& args);
-  void handle_lyric_end(const String& args);
-  void handle_lyric_abort();
+  void handle_song_list_request();
+  void handle_lyric_request(const String& args);
   void notify_line(const String& line);
   String build_state_line() const;
 
   static String arg_value(const String& args, const char* key);
   static String sanitize_gif_filename(const String& value);
+  static String url_encode(const String& value);
   static String url_decode(const String& value);
   static bool base64_decode(const String& input, std::vector<uint8_t>& output);
   static int base64_value(char c);

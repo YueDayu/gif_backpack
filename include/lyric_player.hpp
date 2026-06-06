@@ -13,10 +13,7 @@ class LyricPlayer {
   bool init();
   void set_song_file(const String& filename);
   void set_preview_text(const String& text);
-  void begin_runtime_song(const String& filename);
-  bool append_runtime_line(uint32_t time_ms, const String& text);
-  bool finish_runtime_song(uint32_t progress_ms);
-  void abort_runtime_song();
+  bool get_song_text(const String& filename, String& text) const;
   void set_progress(uint32_t progress_ms);
   uint32_t current_progress_ms() const;
   bool draw(MatrixPanel_I2S_DMA* display);
@@ -72,7 +69,6 @@ class LyricPlayer {
   std::vector<uint8_t> font_bytes_;
   std::vector<Glyph> glyphs_;
   std::vector<LyricLine> lines_;
-  std::vector<LyricLine> pending_runtime_lines_;
 
   String loaded_song_;
   String preview_text_;

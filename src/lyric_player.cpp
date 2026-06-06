@@ -51,42 +51,8 @@ void LyricPlayer::set_preview_text(const String& text) {
   preview_text_ = text == "-" ? "" : text;
 }
 
-void LyricPlayer::begin_runtime_song(const String& filename) {
-  loaded_song_ = filename == "-" ? "" : filename;
-  pending_runtime_lines_.clear();
-  clear_song();
-}
-
-bool LyricPlayer::append_runtime_line(uint32_t time_ms, const String& text) {
-  if (!font_ready_ || text.length() == 0) {
-    return false;
-  }
-
-  LyricLine line;
-  line.time_ms = time_ms;
-  line.text = text;
-  line.width = text_width(text);
-  pending_runtime_lines_.push_back(line);
-  return true;
-}
-
-bool LyricPlayer::finish_runtime_song(uint32_t progress_ms) {
-  std::sort(pending_runtime_lines_.begin(),
-            pending_runtime_lines_.end(),
-            [](const LyricLine& a, const LyricLine& b) {
-              return a.time_ms < b.time_ms;
-            });
-  lines_.swap(pending_runtime_lines_);
-  pending_runtime_lines_.clear();
-
-  duration_ms_ = lines_.empty() ? 0 : lines_.back().time_ms + 5000;
-  song_ready_ = !lines_.empty();
-  set_progress(progress_ms);
-  return song_ready_;
-}
-
-void LyricPlayer::abort_runtime_song() {
-  pending_runtime_lines_.clear();
+bool LyricPlayer::get_song_text(const String& filename, String& text) const {
+  return read_song_text(filename, text);
 }
 
 void LyricPlayer::set_progress(uint32_t progress_ms) {
