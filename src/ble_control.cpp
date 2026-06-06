@@ -69,10 +69,10 @@ bool BleControl::begin(std::function<void()> reload_callback) {
   NimBLEService* service = server->createService(kServiceUuid);
   NimBLECharacteristic* command_characteristic = service->createCharacteristic(
       kCommandUuid,
-      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC);
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
   state_characteristic_ = service->createCharacteristic(
       kStateUuid,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC);
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   command_characteristic->setCallbacks(new CommandCallbacks(this));
   state_characteristic_->setValue(build_state_line().c_str());
