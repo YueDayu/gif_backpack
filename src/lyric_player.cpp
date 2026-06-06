@@ -248,11 +248,13 @@ bool LyricPlayer::read_song_text(const String& filename, String& text) const {
   if (direct) {
     text = direct.readString();
     direct.close();
+    Serial.println(String("read_song_text: direct file ok, len=") + text.length());
     return text.length() > 0;
   }
 
   File index = SPIFFS.open(kLyricIndexFile, "r");
   if (!index) {
+    Serial.println("read_song_text: index file not found");
     return false;
   }
 
@@ -277,15 +279,18 @@ bool LyricPlayer::read_song_text(const String& filename, String& text) const {
   }
   index.close();
   if (length == 0) {
+    Serial.println(String("read_song_text: not found in index, prefix=[") + prefix + "]");
     return false;
   }
 
   File pack = SPIFFS.open(kLyricPackFile, "r");
   if (!pack) {
+    Serial.println("read_song_text: pack file not found");
     return false;
   }
   if (!pack.seek(offset)) {
     pack.close();
+    Serial.println(String("read_song_text: seek failed offset=") + offset);
     return false;
   }
 
@@ -293,10 +298,12 @@ bool LyricPlayer::read_song_text(const String& filename, String& text) const {
   const size_t read_bytes = pack.readBytes(buffer.data(), length);
   pack.close();
   if (read_bytes != length) {
+    Serial.println(String("read_song_text: read mismatch expected=") + length + " got=" + read_bytes);
     return false;
   }
   buffer[length] = '\0';
   text = String(buffer.data());
+  Serial.println(String("read_song_text: pack ok, offset=") + offset + " len=" + length);
   return text.length() > 0;
 }
 
