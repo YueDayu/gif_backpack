@@ -12,7 +12,7 @@ const String gif_basedir = "/gif";
 
 uint8_t scaled_brightness(uint8_t percent) {
   if (percent == 0) {
-    return 24;
+    return 0;
   }
   const int value = int(float(percent) / 100.0f * 233.0f);
   return uint8_t(std::max(24, std::min(233, value)));
