@@ -1,5 +1,31 @@
 #include "configure.hpp"
 
+namespace {
+uint32_t get_uint_or_default(Preferences& preferences, const char* key, uint32_t default_value) {
+  if (!preferences.isKey(key)) {
+    preferences.putUInt(key, default_value);
+    return default_value;
+  }
+  return preferences.getUInt(key, default_value);
+}
+
+bool get_bool_or_default(Preferences& preferences, const char* key, bool default_value) {
+  if (!preferences.isKey(key)) {
+    preferences.putBool(key, default_value);
+    return default_value;
+  }
+  return preferences.getBool(key, default_value);
+}
+
+String get_string_or_default(Preferences& preferences, const char* key, const char* default_value) {
+  if (!preferences.isKey(key)) {
+    preferences.putString(key, default_value);
+    return String(default_value);
+  }
+  return preferences.getString(key, default_value);
+}
+}  // namespace
+
 Configure& Configure::instance() {
   static Configure config;
   return config;
@@ -25,15 +51,15 @@ void Configure::save() {
 }
 
 void Configure::load() {
-  display_bright = preferences.getUInt(PREF_DISPLAY_BRIGHT, 32);
-  auto_bright_min = preferences.getUInt(PREF_DISPLAY_ABC_MIN, 0);
-  auto_bright_max = preferences.getUInt(PREF_DISPLAY_ABC_MAX, 0);
-  wifi_ssid = preferences.getString(PREF_WIFI_SSID, "gif_backpack");
-  wifi_pwd = preferences.getString(PREF_WIFI_PASSWORD, "12345678");
-  gif_filename = preferences.getString(PREF_GIF_FILENAME, "bobo.gif");
-  enable_display = preferences.getBool(PREF_ENABLE_DISPLAY, true);
-  lyric_filename = preferences.getString(PREF_LYRIC_FILENAME, "");
-  lyric_color = preferences.getString(PREF_LYRIC_COLOR, "#ffcc33");
-  lyric_y1 = preferences.getUInt(PREF_LYRIC_Y1, 12);
-  lyric_y2 = preferences.getUInt(PREF_LYRIC_Y2, 36);
+  display_bright = get_uint_or_default(preferences, PREF_DISPLAY_BRIGHT, 32);
+  auto_bright_min = get_uint_or_default(preferences, PREF_DISPLAY_ABC_MIN, 0);
+  auto_bright_max = get_uint_or_default(preferences, PREF_DISPLAY_ABC_MAX, 0);
+  wifi_ssid = get_string_or_default(preferences, PREF_WIFI_SSID, "gif_backpack");
+  wifi_pwd = get_string_or_default(preferences, PREF_WIFI_PASSWORD, "12345678");
+  gif_filename = get_string_or_default(preferences, PREF_GIF_FILENAME, "bobo.gif");
+  enable_display = get_bool_or_default(preferences, PREF_ENABLE_DISPLAY, true);
+  lyric_filename = get_string_or_default(preferences, PREF_LYRIC_FILENAME, "");
+  lyric_color = get_string_or_default(preferences, PREF_LYRIC_COLOR, "#ffcc33");
+  lyric_y1 = get_uint_or_default(preferences, PREF_LYRIC_Y1, 12);
+  lyric_y2 = get_uint_or_default(preferences, PREF_LYRIC_Y2, 36);
 }
