@@ -122,14 +122,14 @@ bool LyricPlayer::load_font() {
     return false;
   }
 
-  font_bytes_.resize(font_file.size());
-  font_file.read(font_bytes_.data(), font_bytes_.size());
+  font_byte_count_ = font_file.size();
   String charset = charset_file.readString();
   font_file.close();
   charset_file.close();
 
   glyph_codepoints_.clear();
   glyph_offset_units_.clear();
+  cached_glyph_offset_ = 0xffffffffUL;
 
   int count_pos = 0;
   size_t glyph_count = 0;
@@ -139,7 +139,7 @@ bool LyricPlayer::load_font() {
     glyph_count++;
     expected_font_bytes += is_han(count_codepoint) ? 32 : 16;
   }
-  if (expected_font_bytes > font_bytes_.size()) {
+  if (expected_font_bytes > font_byte_count_) {
     return false;
   }
   glyph_codepoints_.reserve(glyph_count);
@@ -151,7 +151,7 @@ bool LyricPlayer::load_font() {
   while (next_codepoint(charset, pos, codepoint)) {
     const uint8_t width = is_han(codepoint) ? 16 : 8;
     const uint8_t byte_len = (width * kGlyphHeight) / 8;
-    if (offset + byte_len > font_bytes_.size()) {
+    if (offset + byte_len > font_byte_count_) {
       break;
     }
     glyph_codepoints_.push_back(codepoint);
@@ -159,7 +159,7 @@ bool LyricPlayer::load_font() {
     offset += byte_len;
   }
 
-  return !glyph_codepoints_.empty() && offset <= font_bytes_.size();
+  return !glyph_codepoints_.empty() && offset <= font_byte_count_;
 }
 
 bool LyricPlayer::load_song(const String& filename) {
@@ -423,7 +423,7 @@ bool LyricPlayer::find_glyph(uint32_t codepoint, Glyph& glyph) const {
       glyph.codepoint = codepoint;
       glyph.offset = uint32_t(glyph_offset_units_[mid]) * 16;
       glyph.width = is_han(codepoint) ? 16 : 8;
-      return glyph.offset + ((uint32_t(glyph.width) * kGlyphHeight) / 8) <= font_bytes_.size();
+      return glyph.offset + ((uint32_t(glyph.width) * kGlyphHeight) / 8) <= font_byte_count_;
     }
     if (glyph_codepoints_[mid] < codepoint) {
       left = mid + 1;
@@ -434,13 +434,41 @@ bool LyricPlayer::find_glyph(uint32_t codepoint, Glyph& glyph) const {
   return false;
 }
 
-bool LyricPlayer::glyph_bit(const Glyph& glyph, uint8_t x, uint8_t y) const {
-  const uint32_t bit_index = uint32_t(y) * glyph.width + x;
-  const uint32_t byte_offset = glyph.offset + (bit_index >> 3);
-  if (byte_offset >= font_bytes_.size()) {
+bool LyricPlayer::load_glyph_cache(const Glyph& glyph) const {
+  if (cached_glyph_offset_ == glyph.offset) {
+    return true;
+  }
+
+  const uint8_t byte_len = (glyph.width * kGlyphHeight) / 8;
+  File font_file = SPIFFS.open(kFontFile, "r");
+  if (!font_file) {
     return false;
   }
-  return (font_bytes_[byte_offset] & (0x80 >> (bit_index & 7))) != 0;
+  if (!font_file.seek(glyph.offset)) {
+    font_file.close();
+    return false;
+  }
+
+  const size_t read_bytes = font_file.read(cached_glyph_bytes_, byte_len);
+  font_file.close();
+  if (read_bytes != byte_len) {
+    cached_glyph_offset_ = 0xffffffffUL;
+    return false;
+  }
+  cached_glyph_offset_ = glyph.offset;
+  return true;
+}
+
+bool LyricPlayer::glyph_bit(const Glyph& glyph, uint8_t x, uint8_t y) const {
+  if (!load_glyph_cache(glyph)) {
+    return false;
+  }
+  const uint32_t bit_index = uint32_t(y) * glyph.width + x;
+  const uint32_t byte_offset = bit_index >> 3;
+  if (byte_offset >= sizeof(cached_glyph_bytes_)) {
+    return false;
+  }
+  return (cached_glyph_bytes_[byte_offset] & (0x80 >> (bit_index & 7))) != 0;
 }
 
 uint16_t LyricPlayer::parse_color(MatrixPanel_I2S_DMA* display, const String& color) const {

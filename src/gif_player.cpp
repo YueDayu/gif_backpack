@@ -135,7 +135,7 @@ void GifPlayer::setup_display() {
   );
   mxconfig.gpio.e = 18;
   mxconfig.clkphase = false;
-  mxconfig.double_buff = true;
+  mxconfig.double_buff = double_buffer_enabled_;
   dma_display_ = new MatrixPanel_I2S_DMA(mxconfig);
   dma_display_->begin();
   cur_brightness_ = Configure::instance().display_bright;
@@ -149,7 +149,7 @@ void GifPlayer::setup_display() {
 void GifPlayer::setup_gif() { gif_.begin(LITTLE_ENDIAN_PIXELS); }
 
 void GifPlayer::flush_display() {
-  if (dma_display_ != nullptr) {
+  if (dma_display_ != nullptr && double_buffer_enabled_) {
     dma_display_->flipDMABuffer();
   }
 }

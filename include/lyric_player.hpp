@@ -59,6 +59,7 @@ class LyricPlayer {
                         uint16_t next_color) const;
 
   bool find_glyph(uint32_t codepoint, Glyph& glyph) const;
+  bool load_glyph_cache(const Glyph& glyph) const;
   bool glyph_bit(const Glyph& glyph, uint8_t x, uint8_t y) const;
   uint16_t parse_color(MatrixPanel_I2S_DMA* display, const String& color) const;
 
@@ -66,16 +67,18 @@ class LyricPlayer {
   static bool is_han(uint32_t codepoint);
   static bool parse_timestamp_ms(const String& token, uint32_t& time_ms);
 
-  std::vector<uint8_t> font_bytes_;
   std::vector<uint32_t> glyph_codepoints_;
   std::vector<uint16_t> glyph_offset_units_;
   std::vector<LyricLine> lines_;
 
   String loaded_song_;
   String preview_text_;
+  uint32_t font_byte_count_ = 0;
   uint32_t duration_ms_ = 0;
   uint32_t progress_base_ms_ = 0;
   uint32_t progress_base_clock_ = 0;
+  mutable uint32_t cached_glyph_offset_ = 0xffffffffUL;
+  mutable uint8_t cached_glyph_bytes_[32] = {};
   bool font_ready_ = false;
   bool song_ready_ = false;
 };
