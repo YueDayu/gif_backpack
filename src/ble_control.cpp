@@ -1,6 +1,7 @@
 #include "ble_control.hpp"
 
 #include <NimBLEDevice.h>
+#include <Preferences.h>
 
 #include <algorithm>
 
@@ -13,7 +14,7 @@ constexpr char kDeviceName[] = "gif_backpack";
 constexpr char kServiceUuid[] = "6f8c0001-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr char kCommandUuid[] = "6f8c0002-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr char kStateUuid[] = "6f8c0003-5d2f-4e3c-9f7a-7a1f2e8b0001";
-constexpr uint32_t kPairingPasskey = 260606;
+constexpr uint32_t kSecuritySchemaVersion = 2;
 constexpr size_t kMaxCommandBuffer = 512;
 constexpr size_t kNotifyChunkSize = 20;
 constexpr uint32_t kNotifyChunkDelayMs = 15;
@@ -48,21 +49,27 @@ bool BleControl::begin(std::function<void()> reload_callback) {
   reload_callback_ = reload_callback;
 
   NimBLEDevice::init(kDeviceName);
+  Preferences ble_preferences;
+  if (ble_preferences.begin("ble_control", false)) {
+    const uint32_t saved_version = ble_preferences.getUInt("sec_schema", 0);
+    if (saved_version != kSecuritySchemaVersion) {
+      NimBLEDevice::deleteAllBonds();
+      ble_preferences.putUInt("sec_schema", kSecuritySchemaVersion);
+    }
+    ble_preferences.end();
+  }
   NimBLEDevice::setMTU(185);
-  NimBLEDevice::setSecurityAuth(true, true, true);
-  NimBLEDevice::setSecurityPasskey(kPairingPasskey);
-  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
+  NimBLEDevice::setSecurityAuth(true, false, true);
+  NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
 
   NimBLEServer* server = NimBLEDevice::createServer();
   NimBLEService* service = server->createService(kServiceUuid);
   NimBLECharacteristic* command_characteristic = service->createCharacteristic(
       kCommandUuid,
-      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR |
-          NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
+      NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC);
   state_characteristic_ = service->createCharacteristic(
       kStateUuid,
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY |
-          NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN);
+      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ_ENC);
 
   command_characteristic->setCallbacks(new CommandCallbacks(this));
   state_characteristic_->setValue(build_state_line().c_str());
