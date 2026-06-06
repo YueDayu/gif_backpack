@@ -5,6 +5,7 @@
 #include "configure.hpp"
 #include "gif_player.hpp"
 #include "gif_server.hpp"
+#include "lyric_player.hpp"
 
 const byte DNS_PORT = 53;
 IPAddress apIP(192, 168, 1, 1);
@@ -30,7 +31,11 @@ void setup() {
 
   GifPlayer::instance().init();
   GifPlayer::instance().set_gif_file(config.gif_filename);
-  server.init([]() { GifPlayer::instance().set_gif_file(Configure::instance().gif_filename); });
+  LyricPlayer::instance().init();
+  server.init([]() {
+    GifPlayer::instance().set_gif_file(Configure::instance().gif_filename);
+    LyricPlayer::instance().set_song_file(Configure::instance().lyric_filename);
+  });
   server.begin();
 
   xTaskCreatePinnedToCore(server_task, "server_task", 4096, nullptr, 1, nullptr, 0);

@@ -24,6 +24,10 @@ class Configure {
   const char* const PREF_WIFI_PASSWORD = "wifiPwd";
   const char* const PREF_GIF_FILENAME = "filename";
   const char* const PREF_ENABLE_DISPLAY = "enable";
+  const char* const PREF_LYRIC_FILENAME = "lyricFile";
+  const char* const PREF_LYRIC_COLOR = "lyricColor";
+  const char* const PREF_LYRIC_Y1 = "lyricY1";
+  const char* const PREF_LYRIC_Y2 = "lyricY2";
 
   uint8_t display_bright;
   uint16_t auto_bright_min;
@@ -32,4 +36,8 @@ class Configure {
   String wifi_pwd;
   String gif_filename;
   bool enable_display;
+  String lyric_filename;
+  String lyric_color;
+  uint8_t lyric_y1;
+  uint8_t lyric_y2;
 };

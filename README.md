@@ -30,8 +30,33 @@ TBD
 ## 使用方法
 
 1. 连接Wi-Fi，默认为`gif_backpack`，密码是`12345678`
-2. 修改Wi-Fi ssid&密码、更改亮度： 点击设置
-3. 上传Gif： 点击上传； 无法上传过大文件、只支持分辨率64*64、不能重名且文件名需要小于16个字符
-4. 更改显示图片： 点击列表中的`显示`
-5. 删除图片： 点击列表中的`删除`
-6. 关闭显示、开始显示： 按按钮
+2. 手机访问 `http://192.168.1.1/`
+3. 在网页里选择 GIF 轨道；可以选具体 GIF，也可以选择“无动画”，只显示歌词
+4. 在歌曲列表里搜索并选择歌曲
+5. 点击歌词行可以把设备进度同步到该句歌词
+6. 可以调整歌词颜色、第一行 Y 坐标、第二行 Y 坐标和亮度
+
+## 歌词显示
+
+当前实现把 GIF 和歌词解耦成两条轨道：
+
+* GIF 轨道：继续读取 `/gif/*.gif`，可为空
+* 歌词轨道：读取 `/lyrics/lyrics.pack` 中的当前歌曲，按 `/lyrics/index.txt` 的 offset/length 定位
+* 字库：`/lyrics/font.bin` + `/lyrics/charset.txt`，混合宽度 1bpp；汉字 `16x16`，英文/数字/标点 `8x16`
+* 渲染：每帧先画 GIF 背景，再叠加两行歌词；第二行显示当前句未来窗口，不够时提前露出下一句
+
+Mayday.Blue / MayScreen 歌词资产已放在 `data/lyrics/`：
+
+* `lyrics.pack`：198 首歌词打包后的文本
+* `index.json`：网页搜索和展示使用
+* `index.txt`：固件按文件名查 offset/length 使用
+* `font.bin` / `charset.txt`：共享小字库
+* `summary.json`：资产统计
+
+重新生成歌词资产：
+
+```bash
+python3 -m venv /tmp/gif_backpack_asset_venv
+/tmp/gif_backpack_asset_venv/bin/python -m pip install pillow
+/tmp/gif_backpack_asset_venv/bin/python tools/build_mayday_blue_assets.py
+```

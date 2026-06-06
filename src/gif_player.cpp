@@ -1,6 +1,7 @@
 #include "gif_player.hpp"
 
 #include "configure.hpp"
+#include "lyric_player.hpp"
 
 const int panel_res_x = 64;
 const int panel_res_y = 64;
@@ -33,22 +34,25 @@ void GifPlayer::update() {
     uint8_t real_brightness = float(cur_brightness_) / 100. * 233.;
     dma_display_->setBrightness8(real_brightness);
   }
-  if (!config.enable_display || (!opened_ && !need_reopen_)) {
+  if (!config.enable_display) {
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
   } else if (need_reopen_) {
     if (opened_) {
       gif_.close();
     }
-    String filename = gif_basedir + '/' + cur_filename_;
-    opened_ = gif_.open(filename.c_str(),
-                        &gif_open_file,
-                        &gif_close_file,
-                        &gif_read_file,
-                        &gif_seek_file,
-                        &gif_draw);
+    opened_ = false;
+    if (cur_filename_.length() > 0) {
+      String filename = gif_basedir + '/' + cur_filename_;
+      opened_ = gif_.open(filename.c_str(),
+                          &gif_open_file,
+                          &gif_close_file,
+                          &gif_read_file,
+                          &gif_seek_file,
+                          &gif_draw);
+    }
     need_reopen_ = false;
   } else {
-    if (!gif_.playFrame(true, nullptr)) {
+    if (opened_ && !gif_.playFrame(true, nullptr)) {
       if (on_gif_done_ != nullptr) {
         on_gif_done_(this);
       }
@@ -56,6 +60,13 @@ void GifPlayer::update() {
         gif_.reset();
       }
     }
+  }
+
+  if (config.enable_display) {
+    if (!opened_) {
+      dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+    }
+    LyricPlayer::instance().draw(dma_display_);
   }
 }
 

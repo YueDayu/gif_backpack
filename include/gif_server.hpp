@@ -25,4 +25,8 @@ class GifServer {
   void handle_upload();
   void handle_delete();
   void handle_config();
+  void handle_api_gifs();
+  void handle_api_songs();
+  void handle_api_lyric();
+  void handle_api_state();
 };

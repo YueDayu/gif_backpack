@@ -2,9 +2,16 @@
 
 #include <SPIFFS.h>
 
+#include <algorithm>
+#include <vector>
+
 #include "configure.hpp"
+#include "lyric_player.hpp"
 
 const String gif_basedir = "/gif";
+const String lyric_basedir = "/lyrics";
+const String lyric_pack_file = "/lyrics/lyrics.pack";
+const String lyric_index_file = "/lyrics/index.txt";
 
 // config str: [bright+1] [enable_display+1] [len_ssid+1][len_pwd+1][len_filename+1]
 // [wifi_ssid][wifi_pwd][filename]
@@ -55,16 +62,51 @@ bool set_config_from_str(const String& str, bool save_config = true) {
 bool exists(String path) {
   bool yes = false;
   File file = SPIFFS.open(path, "r");
-  if (!file.isDirectory()) {
+  if (file && !file.isDirectory()) {
     yes = true;
   }
   file.close();
   return yes;
 }
 
+String json_escape(const String& input) {
+  String output;
+  output.reserve(input.length() + 8);
+  for (size_t i = 0; i < input.length(); ++i) {
+    const char c = input[i];
+    switch (c) {
+      case '"':
+        output += "\\\"";
+        break;
+      case '\\':
+        output += "\\\\";
+        break;
+      case '\n':
+        output += "\\n";
+        break;
+      case '\r':
+        output += "\\r";
+        break;
+      case '\t':
+        output += "\\t";
+        break;
+      default:
+        output += c;
+        break;
+    }
+  }
+  return output;
+}
+
+String base_name(const String& path) {
+  const int slash = path.lastIndexOf('/');
+  return slash >= 0 ? path.substring(slash + 1) : path;
+}
+
 bool GifServer::init(std::function<void()> reload_callback) {
   reload_callback_ = reload_callback;
   server_index();
+  server_.serveStatic("/lyrics/", SPIFFS, "/lyrics/");
   server_.on("/filelist", HTTP_POST, [this]() { this->handle_filelist(); });
   server_.on("/gif", HTTP_GET, [this]() { this->handle_gif_file(); });
   server_.on(
@@ -74,6 +116,11 @@ bool GifServer::init(std::function<void()> reload_callback) {
       [this]() { this->handle_upload(); });
   server_.on("/delete", HTTP_POST, [this]() { this->handle_delete(); });
   server_.on("/config", HTTP_POST, [this]() { this->handle_config(); });
+  server_.on("/api/gifs", HTTP_GET, [this]() { this->handle_api_gifs(); });
+  server_.on("/api/songs", HTTP_GET, [this]() { this->handle_api_songs(); });
+  server_.on("/api/lyric", HTTP_GET, [this]() { this->handle_api_lyric(); });
+  server_.on("/api/state", HTTP_GET, [this]() { this->handle_api_state(); });
+  server_.on("/api/state", HTTP_POST, [this]() { this->handle_api_state(); });
   return true;
 }
 
@@ -81,7 +128,19 @@ void GifServer::begin() { server_.begin(); }
 
 void GifServer::handle_client() { server_.handleClient(); }
 
-void GifServer::server_index() { server_.serveStatic("/", SPIFFS, "/web/index.html"); }
+void GifServer::server_index() {
+  auto send_index = [this]() {
+    File file = SPIFFS.open("/web/index.html", "r");
+    if (!file) {
+      server_.send(404, "text/plain", "IndexNotFound");
+      return;
+    }
+    server_.streamFile(file, "text/html");
+    file.close();
+  };
+  server_.on("/", HTTP_GET, send_index);
+  server_.on("/index.html", HTTP_GET, send_index);
+}
 
 void GifServer::handle_gif_file() {
   String gif_file = gif_basedir + '/' + server_.arg("img");
@@ -110,7 +169,7 @@ void GifServer::handle_filelist() {
     output += "{\"sz\":\"";
     output += file.size();
     output += "\",\"nm\":\"";
-    output += String(file.name());
+    output += base_name(String(file.name()));
     output += "\"}";
     file = root.openNextFile();
     is_first = false;
@@ -159,4 +218,198 @@ void GifServer::handle_config() {
     }
   }
   server_.send(200, "text/plain", config_to_str());
+}
+
+void GifServer::handle_api_gifs() {
+  File root = SPIFFS.open(gif_basedir);
+  String output = "{\"total\":";
+  output += SPIFFS.totalBytes();
+  output += ",\"used\":";
+  output += SPIFFS.usedBytes();
+  output += ",\"files\":[";
+
+  File file = root.openNextFile();
+  bool is_first = true;
+  while (file) {
+    if (!is_first) {
+      output += ',';
+    }
+    String name = base_name(String(file.name()));
+    output += "{\"name\":\"";
+    output += json_escape(name);
+    output += "\",\"size\":";
+    output += file.size();
+    output += "}";
+    file = root.openNextFile();
+    is_first = false;
+  }
+  output += "]}";
+  server_.send(200, "application/json", output);
+}
+
+void GifServer::handle_api_songs() {
+  String path = lyric_basedir + "/index.json";
+  if (!exists(path)) {
+    server_.send(200, "application/json", "[]");
+    return;
+  }
+
+  File file = SPIFFS.open(path, "r");
+  server_.streamFile(file, "application/json");
+  file.close();
+}
+
+void GifServer::handle_api_lyric() {
+  if (!server_.hasArg("file")) {
+    server_.send(400, "text/plain", "Missing file");
+    return;
+  }
+
+  const String filename = server_.arg("file");
+  const String direct_path = lyric_basedir + "/" + filename;
+  if (exists(direct_path)) {
+    File file = SPIFFS.open(direct_path, "r");
+    server_.streamFile(file, "text/plain; charset=utf-8");
+    file.close();
+    return;
+  }
+
+  File index = SPIFFS.open(lyric_index_file, "r");
+  if (!index) {
+    server_.send(404, "text/plain", "LyricIndexNotFound");
+    return;
+  }
+
+  uint32_t offset = 0;
+  uint32_t length = 0;
+  const String prefix = filename + "\t";
+  while (index.available()) {
+    String line = index.readStringUntil('\n');
+    line.trim();
+    if (!line.startsWith(prefix)) {
+      continue;
+    }
+    const int first_tab = line.indexOf('\t');
+    const int second_tab = line.indexOf('\t', first_tab + 1);
+    const int third_tab = line.indexOf('\t', second_tab + 1);
+    if (first_tab < 0 || second_tab < 0 || third_tab < 0) {
+      continue;
+    }
+    offset = line.substring(first_tab + 1, second_tab).toInt();
+    length = line.substring(second_tab + 1, third_tab).toInt();
+    break;
+  }
+  index.close();
+
+  if (length == 0) {
+    server_.send(404, "text/plain", "LyricNotFound");
+    return;
+  }
+
+  File pack = SPIFFS.open(lyric_pack_file, "r");
+  if (!pack || !pack.seek(offset)) {
+    server_.send(404, "text/plain", "LyricPackNotFound");
+    return;
+  }
+
+  std::vector<char> buffer(length + 1);
+  const size_t read_bytes = pack.readBytes(buffer.data(), length);
+  pack.close();
+  if (read_bytes != length) {
+    server_.send(500, "text/plain", "LyricReadFailed");
+    return;
+  }
+  buffer[length] = '\0';
+  server_.send(200, "text/plain; charset=utf-8", buffer.data());
+}
+
+void GifServer::handle_api_state() {
+  auto& config = Configure::instance();
+  bool needs_save = false;
+  bool needs_reload = false;
+  uint32_t requested_progress = LyricPlayer::instance().current_progress_ms();
+  bool has_progress = false;
+
+  if (server_.method() == HTTP_POST) {
+    if (server_.hasArg("bright")) {
+      const int value = server_.arg("bright").toInt();
+      config.display_bright = std::max(0, std::min(100, value));
+      needs_save = true;
+    }
+    if (server_.hasArg("enable")) {
+      String value = server_.arg("enable");
+      config.enable_display = value == "1" || value == "true";
+      needs_save = true;
+    }
+    if (server_.hasArg("gif")) {
+      String value = server_.arg("gif");
+      if (value != config.gif_filename) {
+        config.gif_filename = value;
+        needs_save = true;
+        needs_reload = true;
+      }
+    }
+    if (server_.hasArg("song")) {
+      String value = server_.arg("song");
+      if (value != config.lyric_filename) {
+        config.lyric_filename = value;
+        needs_save = true;
+        needs_reload = true;
+        requested_progress = 0;
+        has_progress = true;
+      }
+    }
+    if (server_.hasArg("color")) {
+      String value = server_.arg("color");
+      value.trim();
+      if (value.length() == 7 && value.startsWith("#")) {
+        config.lyric_color = value;
+        needs_save = true;
+      }
+    }
+    if (server_.hasArg("y1")) {
+      const int value = server_.arg("y1").toInt();
+      config.lyric_y1 = std::max(0, std::min(48, value));
+      needs_save = true;
+    }
+    if (server_.hasArg("y2")) {
+      const int value = server_.arg("y2").toInt();
+      config.lyric_y2 = std::max(0, std::min(48, value));
+      needs_save = true;
+    }
+    if (server_.hasArg("progress")) {
+      requested_progress = std::max(0, int(server_.arg("progress").toInt()));
+      has_progress = true;
+    }
+
+    if (needs_save) {
+      config.save();
+    }
+    if (needs_reload && reload_callback_ != nullptr) {
+      reload_callback_();
+    }
+    if (has_progress) {
+      LyricPlayer::instance().set_progress(requested_progress);
+    }
+  }
+
+  String output = "{";
+  output += "\"bright\":";
+  output += config.display_bright;
+  output += ",\"enable\":";
+  output += config.enable_display ? "true" : "false";
+  output += ",\"gif\":\"";
+  output += json_escape(config.gif_filename);
+  output += "\",\"song\":\"";
+  output += json_escape(config.lyric_filename);
+  output += "\",\"progressMs\":";
+  output += LyricPlayer::instance().current_progress_ms();
+  output += ",\"color\":\"";
+  output += json_escape(config.lyric_color);
+  output += "\",\"y1\":";
+  output += config.lyric_y1;
+  output += ",\"y2\":";
+  output += config.lyric_y2;
+  output += "}";
+  server_.send(200, "application/json", output);
 }

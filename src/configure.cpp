@@ -18,6 +18,10 @@ void Configure::save() {
   preferences.putString(PREF_WIFI_PASSWORD, wifi_pwd);
   preferences.putString(PREF_GIF_FILENAME, gif_filename);
   preferences.putBool(PREF_ENABLE_DISPLAY, enable_display);
+  preferences.putString(PREF_LYRIC_FILENAME, lyric_filename);
+  preferences.putString(PREF_LYRIC_COLOR, lyric_color);
+  preferences.putUInt(PREF_LYRIC_Y1, lyric_y1);
+  preferences.putUInt(PREF_LYRIC_Y2, lyric_y2);
 }
 
 void Configure::load() {
@@ -28,4 +32,8 @@ void Configure::load() {
   wifi_pwd = preferences.getString(PREF_WIFI_PASSWORD, "12345678");
   gif_filename = preferences.getString(PREF_GIF_FILENAME, "bobo.gif");
   enable_display = preferences.getBool(PREF_ENABLE_DISPLAY, true);
+  lyric_filename = preferences.getString(PREF_LYRIC_FILENAME, "");
+  lyric_color = preferences.getString(PREF_LYRIC_COLOR, "#ffcc33");
+  lyric_y1 = preferences.getUInt(PREF_LYRIC_Y1, 12);
+  lyric_y2 = preferences.getUInt(PREF_LYRIC_Y2, 36);
 }
