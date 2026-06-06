@@ -114,6 +114,10 @@ void BleControl::handle_command(const String& command) {
     notify_state();
     return;
   }
+  if (command == "GIFS?") {
+    handle_gif_list_request();
+    return;
+  }
   if (command == "SONGS?") {
     handle_song_list_request();
     return;
@@ -352,6 +356,37 @@ void BleControl::handle_upload_abort() {
   upload_filename_ = "";
   upload_expected_size_ = 0;
   upload_received_size_ = 0;
+}
+
+void BleControl::handle_gif_list_request() {
+  File root = SPIFFS.open("/");
+  if (!root) {
+    notify_line("ERR gifs_dir_missing");
+    return;
+  }
+
+  notify_line("GIFS_BEGIN");
+  size_t count = 0;
+  File file = root.openNextFile();
+  while (file) {
+    String path = file.name();
+    String name = path;
+    const int slash = name.lastIndexOf('/');
+    if (slash >= 0) {
+      name = name.substring(slash + 1);
+    }
+    String lower_name = name;
+    lower_name.toLowerCase();
+    const bool in_gif_dir = path.startsWith("/gif/") || path.startsWith("gif/");
+    if (!file.isDirectory() && in_gif_dir && lower_name.endsWith(".gif")) {
+      notify_line("GIF file=" + url_encode(name));
+      count++;
+    }
+    file.close();
+    file = root.openNextFile();
+  }
+  root.close();
+  notify_line("GIFS_END count=" + String(count));
 }
 
 void BleControl::handle_song_list_request() {

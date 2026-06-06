@@ -21,6 +21,7 @@ class BleControl {
   void handle_upload_data(const String& args);
   void handle_upload_end();
   void handle_upload_abort();
+  void handle_gif_list_request();
   void handle_song_list_request();
   void handle_lyric_request(const String& args);
   void notify_line(const String& line);

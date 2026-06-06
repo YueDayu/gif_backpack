@@ -64,9 +64,7 @@ void GifPlayer::update() {
       return;
     }
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
-    if (!LyricPlayer::instance().draw(dma_display_)) {
-      draw_lyric_diagnostic();
-    }
+    LyricPlayer::instance().draw(dma_display_);
     flush_display();
     static_frame_dirty_ = false;
     last_static_draw_ms_ = now;
@@ -152,23 +150,6 @@ void GifPlayer::flush_display() {
   if (dma_display_ != nullptr && double_buffer_enabled_) {
     dma_display_->flipDMABuffer();
   }
-}
-
-void GifPlayer::draw_lyric_diagnostic() {
-  const auto& lyric = LyricPlayer::instance();
-  uint16_t color = dma_display_->color565(0, 180, 255);
-  if (!lyric.font_ready()) {
-    color = dma_display_->color565(255, 0, 0);
-  } else if (!lyric.song_ready() || lyric.line_count() == 0) {
-    color = dma_display_->color565(255, 180, 0);
-  }
-  dma_display_->drawRect(0, 0, 64, 64, color);
-  dma_display_->drawRect(2, 2, 60, 60, color);
-  dma_display_->fillRect(6, 6, 10, 10, color);
-  dma_display_->fillRect(24, 6, 10, 10, dma_display_->color565(255, 255, 255));
-  dma_display_->fillRect(42, 6, 10, 10, color);
-  dma_display_->drawLine(8, 28, 55, 28, color);
-  dma_display_->drawLine(8, 40, 55, 40, color);
 }
 
 void* GifPlayer::gif_open_file(const char* filename, int32_t* p_size) {
