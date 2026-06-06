@@ -8,5 +8,7 @@
   "charsetBytes": 6945,
   "syntheticTimingSongCount": 12,
   "fontPath": "/System/Library/Fonts/Hiragino Sans GB.ttc",
-  "threshold": 128
+  "fontIndex": 2,
+  "threshold": 128,
+  "strokePx": 0
 }

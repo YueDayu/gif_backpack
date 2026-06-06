@@ -128,7 +128,8 @@ bool LyricPlayer::load_font() {
   font_file.close();
   charset_file.close();
 
-  glyphs_.clear();
+  glyph_codepoints_.clear();
+  glyph_offset_units_.clear();
 
   int count_pos = 0;
   size_t glyph_count = 0;
@@ -141,7 +142,8 @@ bool LyricPlayer::load_font() {
   if (expected_font_bytes > font_bytes_.size()) {
     return false;
   }
-  glyphs_.reserve(glyph_count);
+  glyph_codepoints_.reserve(glyph_count);
+  glyph_offset_units_.reserve(glyph_count);
 
   int pos = 0;
   uint32_t offset = 0;
@@ -152,15 +154,12 @@ bool LyricPlayer::load_font() {
     if (offset + byte_len > font_bytes_.size()) {
       break;
     }
-    Glyph glyph;
-    glyph.codepoint = codepoint;
-    glyph.offset = offset;
-    glyph.width = width;
-    glyphs_.push_back(glyph);
+    glyph_codepoints_.push_back(codepoint);
+    glyph_offset_units_.push_back(offset / 16);
     offset += byte_len;
   }
 
-  return !glyphs_.empty() && offset <= font_bytes_.size();
+  return !glyph_codepoints_.empty() && offset <= font_bytes_.size();
 }
 
 bool LyricPlayer::load_song(const String& filename) {
@@ -310,9 +309,9 @@ uint16_t LyricPlayer::text_width(const String& text) const {
   uint16_t width = 0;
   int pos = 0;
   uint32_t codepoint = 0;
+  Glyph glyph;
   while (next_codepoint(text, pos, codepoint)) {
-    const Glyph* glyph = find_glyph(codepoint);
-    width += glyph ? glyph->width : 8;
+    width += find_glyph(codepoint, glyph) ? glyph.width : 8;
   }
   return width;
 }
@@ -365,21 +364,22 @@ bool LyricPlayer::draw_glyph_line(MatrixPanel_I2S_DMA* display,
   int cursor_x = start_x;
   int pos = 0;
   uint32_t codepoint = 0;
+  Glyph glyph;
   while (next_codepoint(text, pos, codepoint)) {
-    const Glyph* glyph = find_glyph(codepoint);
-    const uint8_t glyph_width = glyph ? glyph->width : 8;
-    if (glyph && cursor_x < kScreenWidth && cursor_x + glyph_width > 0) {
+    const bool has_glyph = find_glyph(codepoint, glyph);
+    const uint8_t glyph_width = has_glyph ? glyph.width : 8;
+    if (has_glyph && cursor_x < kScreenWidth && cursor_x + glyph_width > 0) {
       for (uint8_t y = 0; y < kGlyphHeight; ++y) {
         const int py = start_y + y;
         if (py < 0 || py >= kScreenHeight) {
           continue;
         }
-        for (uint8_t x = 0; x < glyph->width; ++x) {
+        for (uint8_t x = 0; x < glyph.width; ++x) {
           const int px = cursor_x + x;
           if (px < 0 || px >= kScreenWidth) {
             continue;
           }
-          if (glyph_bit(*glyph, x, y)) {
+          if (glyph_bit(glyph, x, y)) {
             display->drawPixel(px, py, color);
             drawn = true;
           }
@@ -414,21 +414,24 @@ bool LyricPlayer::draw_future_line(MatrixPanel_I2S_DMA* display,
   return drawn;
 }
 
-const LyricPlayer::Glyph* LyricPlayer::find_glyph(uint32_t codepoint) const {
+bool LyricPlayer::find_glyph(uint32_t codepoint, Glyph& glyph) const {
   int left = 0;
-  int right = static_cast<int>(glyphs_.size()) - 1;
+  int right = static_cast<int>(glyph_codepoints_.size()) - 1;
   while (left <= right) {
     const int mid = left + (right - left) / 2;
-    if (glyphs_[mid].codepoint == codepoint) {
-      return &glyphs_[mid];
+    if (glyph_codepoints_[mid] == codepoint) {
+      glyph.codepoint = codepoint;
+      glyph.offset = uint32_t(glyph_offset_units_[mid]) * 16;
+      glyph.width = is_han(codepoint) ? 16 : 8;
+      return glyph.offset + ((uint32_t(glyph.width) * kGlyphHeight) / 8) <= font_bytes_.size();
     }
-    if (glyphs_[mid].codepoint < codepoint) {
+    if (glyph_codepoints_[mid] < codepoint) {
       left = mid + 1;
     } else {
       right = mid - 1;
     }
   }
-  return nullptr;
+  return false;
 }
 
 bool LyricPlayer::glyph_bit(const Glyph& glyph, uint8_t x, uint8_t y) const {

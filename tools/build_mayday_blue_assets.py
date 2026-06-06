@@ -56,13 +56,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-lrc-dir", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--output-dir", type=Path, default=Path("data/lyrics"))
     parser.add_argument("--font", type=Path, default=None)
+    parser.add_argument(
+        "--font-index",
+        type=int,
+        default=None,
+        help="TTC face index. Defaults to the bold Hiragino Sans GB face when available.",
+    )
     parser.add_argument("--font-px", type=int, default=16)
     parser.add_argument("--threshold", type=int, default=128)
+    parser.add_argument(
+        "--stroke-px",
+        type=int,
+        default=0,
+        help="Optional binary dilation radius after glyph rasterization; use only if the bold face is still too thin.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    stroke_px = max(0, args.stroke_px)
     source_dir = args.source_lrc_dir.expanduser()
     output_dir = args.output_dir
     if not source_dir.exists():
@@ -71,6 +84,9 @@ def main() -> None:
     font_path = args.font or find_font()
     if not font_path:
         raise SystemExit("No usable CJK font found. Pass --font /path/to/font.ttc")
+    font_index = (
+        args.font_index if args.font_index is not None else default_font_index(font_path)
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     for old in output_dir.glob("*.lrc"):
@@ -111,8 +127,10 @@ def main() -> None:
     font_bytes = build_font_bytes(
         ordered_chars,
         font_path=font_path,
+        font_index=font_index,
         font_px=args.font_px,
         threshold=args.threshold,
+        stroke_px=stroke_px,
     )
 
     (output_dir / "font.bin").write_bytes(font_bytes)
@@ -127,7 +145,9 @@ def main() -> None:
         font_bytes=font_bytes,
         lrc_bytes=pack_offset,
         font_path=font_path,
+        font_index=font_index,
         threshold=args.threshold,
+        stroke_px=stroke_px,
     )
 
     print(
@@ -141,6 +161,12 @@ def find_font() -> Path | None:
         if path.exists():
             return path
     return None
+
+
+def default_font_index(font_path: Path) -> int:
+    if font_path.name == "Hiragino Sans GB.ttc":
+        return 2
+    return 0
 
 
 def parse_meta(text: str) -> dict[str, str]:
@@ -195,11 +221,20 @@ def timed_line_texts(text: str) -> list[str]:
     return lines
 
 
-def build_font_bytes(chars: list[str], font_path: Path, font_px: int, threshold: int) -> bytes:
+def build_font_bytes(
+    chars: list[str],
+    font_path: Path,
+    font_index: int,
+    font_px: int,
+    threshold: int,
+    stroke_px: int,
+) -> bytes:
     chunks: list[bytes] = []
     for ch in chars:
         width = glyph_width(ch)
-        chunks.append(render_glyph(ch, width, font_path, font_px, threshold))
+        chunks.append(
+            render_glyph(ch, width, font_path, font_index, font_px, threshold, stroke_px)
+        )
     return b"".join(chunks)
 
 
@@ -222,13 +257,21 @@ def is_han(codepoint: int) -> bool:
     )
 
 
-def render_glyph(ch: str, width: int, font_path: Path, font_px: int, threshold: int) -> bytes:
+def render_glyph(
+    ch: str,
+    width: int,
+    font_path: Path,
+    font_index: int,
+    font_px: int,
+    threshold: int,
+    stroke_px: int,
+) -> bytes:
     height = 16
     scale = 4
     image = Image.new("L", (width * scale, height * scale), 0)
     draw = ImageDraw.Draw(image)
     px = min(font_px, 14) if width == 8 else font_px
-    font = ImageFont.truetype(str(font_path), px * scale)
+    font = ImageFont.truetype(str(font_path), px * scale, index=font_index)
 
     if ch != " ":
         bbox = draw.textbbox((0, 0), ch, font=font)
@@ -239,17 +282,54 @@ def render_glyph(ch: str, width: int, font_path: Path, font_px: int, threshold: 
         draw.text((x, y), ch, fill=255, font=font)
 
     raw = image.load()
+    bitmap = [[False for _ in range(width)] for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            total = 0
+            for sy in range(scale):
+                for sx in range(scale):
+                    total += raw[x * scale + sx, y * scale + sy]
+            alpha = total / (scale * scale)
+            if alpha >= threshold:
+                bitmap[y][x] = True
+
+    if ch != " " and stroke_px > 0:
+        bitmap = dilate_bitmap(bitmap, width, height, stroke_px)
+
+    return pack_bitmap(bitmap, width, height)
+
+
+def dilate_bitmap(
+    bitmap: list[list[bool]],
+    width: int,
+    height: int,
+    stroke_px: int,
+) -> list[list[bool]]:
+    radius = max(0, stroke_px)
+    out = [[False for _ in range(width)] for _ in range(height)]
+    for y in range(height):
+        for x in range(width):
+            if not bitmap[y][x]:
+                continue
+            for dy in range(-radius, radius + 1):
+                ny = y + dy
+                if ny < 0 or ny >= height:
+                    continue
+                for dx in range(-radius, radius + 1):
+                    nx = x + dx
+                    if nx < 0 or nx >= width:
+                        continue
+                    out[ny][nx] = True
+    return out
+
+
+def pack_bitmap(bitmap: list[list[bool]], width: int, height: int) -> bytes:
     out = bytearray(width * height // 8)
     for y in range(height):
-      for x in range(width):
-        total = 0
-        for sy in range(scale):
-          for sx in range(scale):
-            total += raw[x * scale + sx, y * scale + sy]
-        alpha = total / (scale * scale)
-        if alpha >= threshold:
-          bit_index = y * width + x
-          out[bit_index >> 3] |= 0x80 >> (bit_index & 7)
+        for x in range(width):
+            if bitmap[y][x]:
+                bit_index = y * width + x
+                out[bit_index >> 3] |= 0x80 >> (bit_index & 7)
     return bytes(out)
 
 
@@ -286,7 +366,9 @@ def write_summary(
     font_bytes: bytes,
     lrc_bytes: int,
     font_path: Path,
+    font_index: int,
     threshold: int,
+    stroke_px: int,
 ) -> None:
     han_count = sum(1 for ch in charset if glyph_width(ch) == 16)
     half_count = len(charset) - han_count
@@ -300,7 +382,9 @@ def write_summary(
         "charsetBytes": len("".join(charset).encode("utf-8")),
         "syntheticTimingSongCount": sum(1 for song in songs if song.synthetic_timing),
         "fontPath": str(font_path),
+        "fontIndex": font_index,
         "threshold": threshold,
+        "strokePx": stroke_px,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
