@@ -21,6 +21,10 @@ class BleControl {
   void handle_upload_data(const String& args);
   void handle_upload_end();
   void handle_upload_abort();
+  void handle_lyric_begin(const String& args);
+  void handle_lyric_line(const String& args);
+  void handle_lyric_end(const String& args);
+  void handle_lyric_abort();
   void notify_line(const String& line);
   String build_state_line() const;
 

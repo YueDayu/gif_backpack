@@ -24,6 +24,14 @@ DEFAULT_SOURCE = Path(
     "/Users/yuedayu/code/gif_backpack_txt_render_web/data/mayday_blue_analysis/lrc"
 )
 DEFAULT_FONT_CANDIDATES = [
+    Path("/Library/Fonts/Microsoft YaHei.ttf"),
+    Path("/Library/Fonts/Microsoft YaHei UI.ttf"),
+    Path("/Library/Fonts/msyh.ttc"),
+    Path("/Library/Fonts/msyh.ttf"),
+    Path.home() / "Library/Fonts/Microsoft YaHei.ttf",
+    Path.home() / "Library/Fonts/Microsoft YaHei UI.ttf",
+    Path.home() / "Library/Fonts/msyh.ttc",
+    Path.home() / "Library/Fonts/msyh.ttf",
     Path("/System/Library/Fonts/Hiragino Sans GB.ttc"),
     Path("/System/Library/Fonts/STHeiti Medium.ttc"),
     Path("/System/Library/Fonts/Supplemental/Songti.ttc"),

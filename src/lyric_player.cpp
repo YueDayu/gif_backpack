@@ -51,6 +51,44 @@ void LyricPlayer::set_preview_text(const String& text) {
   preview_text_ = text == "-" ? "" : text;
 }
 
+void LyricPlayer::begin_runtime_song(const String& filename) {
+  loaded_song_ = filename == "-" ? "" : filename;
+  pending_runtime_lines_.clear();
+  clear_song();
+}
+
+bool LyricPlayer::append_runtime_line(uint32_t time_ms, const String& text) {
+  if (!font_ready_ || text.length() == 0) {
+    return false;
+  }
+
+  LyricLine line;
+  line.time_ms = time_ms;
+  line.text = text;
+  line.width = text_width(text);
+  pending_runtime_lines_.push_back(line);
+  return true;
+}
+
+bool LyricPlayer::finish_runtime_song(uint32_t progress_ms) {
+  std::sort(pending_runtime_lines_.begin(),
+            pending_runtime_lines_.end(),
+            [](const LyricLine& a, const LyricLine& b) {
+              return a.time_ms < b.time_ms;
+            });
+  lines_.swap(pending_runtime_lines_);
+  pending_runtime_lines_.clear();
+
+  duration_ms_ = lines_.empty() ? 0 : lines_.back().time_ms + 5000;
+  song_ready_ = !lines_.empty();
+  set_progress(progress_ms);
+  return song_ready_;
+}
+
+void LyricPlayer::abort_runtime_song() {
+  pending_runtime_lines_.clear();
+}
+
 void LyricPlayer::set_progress(uint32_t progress_ms) {
   progress_base_ms_ = duration_ms_ == 0 ? progress_ms : std::min(progress_ms, duration_ms_);
   progress_base_clock_ = millis();
@@ -99,7 +137,6 @@ bool LyricPlayer::draw_preview_line(MatrixPanel_I2S_DMA* display) const {
 
   const auto& config = Configure::instance();
   const uint16_t current_color = parse_color(display, config.lyric_color);
-  const uint16_t next_color = parse_color(display, config.lyric_next_color);
   const int y1 = std::max(0, std::min<int>(config.lyric_y1, kScreenHeight - kGlyphHeight));
   const int y2 = std::max(0, std::min<int>(config.lyric_y2, kScreenHeight - kGlyphHeight));
   const uint16_t width = text_width(preview_text_);
@@ -108,7 +145,7 @@ bool LyricPlayer::draw_preview_line(MatrixPanel_I2S_DMA* display) const {
   }
 
   const bool first_drawn = draw_glyph_line(display, preview_text_, 0, y1, current_color);
-  const bool second_drawn = draw_glyph_line(display, preview_text_, -kScreenWidth, y2, next_color);
+  const bool second_drawn = draw_glyph_line(display, preview_text_, -kScreenWidth, y2, current_color);
   return first_drawn || second_drawn;
 }
 

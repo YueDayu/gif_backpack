@@ -19,6 +19,7 @@ class GifPlayer {
   void setup_display();
   void setup_gif();
   void draw_lyric_diagnostic();
+  void flush_display();
 
   static void* gif_open_file(const char* filename, int32_t* p_size);
   static void gif_close_file(void* p_handle);

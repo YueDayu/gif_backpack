@@ -49,6 +49,7 @@ void GifPlayer::update() {
   }
   if (!config.enable_display) {
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+    flush_display();
     static_frame_dirty_ = true;
     return;
   }
@@ -66,6 +67,7 @@ void GifPlayer::update() {
     if (!LyricPlayer::instance().draw(dma_display_)) {
       draw_lyric_diagnostic();
     }
+    flush_display();
     static_frame_dirty_ = false;
     last_static_draw_ms_ = now;
     return;
@@ -78,6 +80,7 @@ void GifPlayer::update() {
     }
     if (static_frame_dirty_) {
       dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+      flush_display();
       static_frame_dirty_ = false;
     }
     return;
@@ -102,8 +105,10 @@ void GifPlayer::update() {
                           &gif_draw);
     }
     need_reopen_ = false;
-  } else {
-    if (opened_ && !gif_.playFrame(true, nullptr)) {
+  } else if (opened_) {
+    if (gif_.playFrame(true, nullptr)) {
+      flush_display();
+    } else {
       if (on_gif_done_ != nullptr) {
         on_gif_done_(this);
       }
@@ -116,6 +121,7 @@ void GifPlayer::update() {
   if (!opened_) {
     if (static_frame_dirty_) {
       dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+      flush_display();
       static_frame_dirty_ = false;
     }
     return;
@@ -129,6 +135,7 @@ void GifPlayer::setup_display() {
   );
   mxconfig.gpio.e = 18;
   mxconfig.clkphase = false;
+  mxconfig.double_buff = true;
   dma_display_ = new MatrixPanel_I2S_DMA(mxconfig);
   dma_display_->begin();
   cur_brightness_ = Configure::instance().display_bright;
@@ -136,9 +143,16 @@ void GifPlayer::setup_display() {
   dma_display_->clearScreen();
   dma_display_->setRotation(2);
   dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+  flush_display();
 }
 
 void GifPlayer::setup_gif() { gif_.begin(LITTLE_ENDIAN_PIXELS); }
+
+void GifPlayer::flush_display() {
+  if (dma_display_ != nullptr) {
+    dma_display_->flipDMABuffer();
+  }
+}
 
 void GifPlayer::draw_lyric_diagnostic() {
   const auto& lyric = LyricPlayer::instance();

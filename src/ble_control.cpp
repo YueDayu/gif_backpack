@@ -133,6 +133,26 @@ void BleControl::handle_command(const String& command) {
     handle_upload_abort();
     return;
   }
+  if (command.startsWith("LYRIC_BEGIN ")) {
+    handle_lyric_begin(command.substring(12));
+    return;
+  }
+  if (command.startsWith("LYRIC_LINE ")) {
+    handle_lyric_line(command.substring(11));
+    return;
+  }
+  if (command.startsWith("LYRIC_END ")) {
+    handle_lyric_end(command.substring(10));
+    return;
+  }
+  if (command == "LYRIC_END") {
+    handle_lyric_end("");
+    return;
+  }
+  if (command == "LYRIC_ABORT") {
+    handle_lyric_abort();
+    return;
+  }
   notify_line("ERR unknown_command");
 }
 
@@ -343,6 +363,38 @@ void BleControl::handle_upload_abort() {
   upload_filename_ = "";
   upload_expected_size_ = 0;
   upload_received_size_ = 0;
+}
+
+void BleControl::handle_lyric_begin(const String& args) {
+  const String filename = arg_value(args, "file");
+  LyricPlayer::instance().begin_runtime_song(filename.length() ? filename : "-");
+  notify_line("LYRIC_READY file=" + (filename.length() ? filename : "-"));
+}
+
+void BleControl::handle_lyric_line(const String& args) {
+  const uint32_t time_ms = uint32_t(std::max<long>(0, arg_value(args, "time").toInt()));
+  const String text = arg_value(args, "text");
+  if (!LyricPlayer::instance().append_runtime_line(time_ms, text)) {
+    notify_line("ERR lyric_bad_line");
+  }
+}
+
+void BleControl::handle_lyric_end(const String& args) {
+  uint32_t progress_ms = LyricPlayer::instance().current_progress_ms();
+  const String value = arg_value(args, "progress");
+  if (value.length() > 0) {
+    progress_ms = uint32_t(std::max<long>(0, value.toInt()));
+  }
+  if (!LyricPlayer::instance().finish_runtime_song(progress_ms)) {
+    notify_line("ERR lyric_empty");
+    return;
+  }
+  notify_state();
+}
+
+void BleControl::handle_lyric_abort() {
+  LyricPlayer::instance().abort_runtime_song();
+  notify_line("LYRIC_ABORTED");
 }
 
 void BleControl::notify_state() {
