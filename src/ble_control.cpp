@@ -18,8 +18,8 @@ constexpr char kCommandUuid[] = "6f8c0002-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr char kStateUuid[] = "6f8c0003-5d2f-4e3c-9f7a-7a1f2e8b0001";
 constexpr uint32_t kSecuritySchemaVersion = 2;
 constexpr size_t kMaxCommandBuffer = 512;
-constexpr size_t kNotifyChunkSize = 20;
-constexpr uint32_t kNotifyChunkDelayMs = 15;
+constexpr size_t kNotifyChunkSize = 180;
+constexpr uint32_t kNotifyChunkDelayMs = 20;
 constexpr char kLyricIndexFile[] = "/lyrics/index.txt";
 
 class CommandCallbacks : public NimBLECharacteristicCallbacks {
