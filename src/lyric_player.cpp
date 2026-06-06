@@ -47,28 +47,35 @@ void LyricPlayer::set_song_file(const String& filename) {
   song_ready_ = true;
 }
 
+void LyricPlayer::set_preview_text(const String& text) {
+  preview_text_ = text == "-" ? "" : text;
+}
+
 void LyricPlayer::set_progress(uint32_t progress_ms) {
-  progress_base_ms_ = std::min(progress_ms, duration_ms_);
+  progress_base_ms_ = duration_ms_ == 0 ? progress_ms : std::min(progress_ms, duration_ms_);
   progress_base_clock_ = millis();
 }
 
 uint32_t LyricPlayer::current_progress_ms() const {
   if (duration_ms_ == 0) {
-    return 0;
+    return progress_base_ms_;
   }
   const uint32_t elapsed = millis() - progress_base_clock_;
   return std::min(progress_base_ms_ + elapsed, duration_ms_);
 }
 
 bool LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
-  if (!display || !font_ready_ || lines_.empty()) {
+  if (!display || !font_ready_) {
     return false;
+  }
+  if (lines_.empty()) {
+    return draw_preview_line(display);
   }
 
   const uint32_t progress_ms = current_progress_ms();
   const int line_index = current_line_index(progress_ms);
   if (line_index < 0) {
-    return false;
+    return draw_preview_line(display);
   }
 
   const auto& config = Configure::instance();
@@ -83,6 +90,26 @@ bool LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
   const bool future_drawn =
       draw_future_line(display, line_index, first_line_x, y2, current_color, next_color);
   return current_drawn || future_drawn;
+}
+
+bool LyricPlayer::draw_preview_line(MatrixPanel_I2S_DMA* display) const {
+  if (preview_text_.length() == 0) {
+    return false;
+  }
+
+  const auto& config = Configure::instance();
+  const uint16_t current_color = parse_color(display, config.lyric_color);
+  const uint16_t next_color = parse_color(display, config.lyric_next_color);
+  const int y1 = std::max(0, std::min<int>(config.lyric_y1, kScreenHeight - kGlyphHeight));
+  const int y2 = std::max(0, std::min<int>(config.lyric_y2, kScreenHeight - kGlyphHeight));
+  const uint16_t width = text_width(preview_text_);
+  if (width <= kScreenWidth) {
+    return draw_glyph_line(display, preview_text_, (kScreenWidth - width) / 2, y1, current_color);
+  }
+
+  const bool first_drawn = draw_glyph_line(display, preview_text_, 0, y1, current_color);
+  const bool second_drawn = draw_glyph_line(display, preview_text_, -kScreenWidth, y2, next_color);
+  return first_drawn || second_drawn;
 }
 
 bool LyricPlayer::load_font() {

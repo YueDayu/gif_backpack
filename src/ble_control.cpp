@@ -182,6 +182,11 @@ void BleControl::handle_set_command(const String& args) {
     has_progress = true;
   }
 
+  value = arg_value(args, "preview");
+  if (value.length() > 0) {
+    LyricPlayer::instance().set_preview_text(value);
+  }
+
   value = arg_value(args, "color");
   if (value.length() > 0) {
     value.trim();
@@ -394,6 +399,8 @@ String BleControl::build_state_line() const {
   output += LyricPlayer::instance().song_ready() ? "1" : "0";
   output += "&lyricLines=";
   output += LyricPlayer::instance().line_count();
+  output += "&preview=";
+  output += LyricPlayer::instance().preview_ready() ? "1" : "0";
   return output;
 }
 

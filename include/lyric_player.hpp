@@ -12,11 +12,13 @@ class LyricPlayer {
 
   bool init();
   void set_song_file(const String& filename);
+  void set_preview_text(const String& text);
   void set_progress(uint32_t progress_ms);
   uint32_t current_progress_ms() const;
   bool draw(MatrixPanel_I2S_DMA* display);
   bool font_ready() const { return font_ready_; }
   bool song_ready() const { return song_ready_; }
+  bool preview_ready() const { return preview_text_.length() > 0; }
   size_t line_count() const { return lines_.size(); }
 
  private:
@@ -42,6 +44,7 @@ class LyricPlayer {
   uint16_t text_width(const String& text) const;
   int current_line_index(uint32_t progress_ms) const;
   int scroll_x_for_line(int line_index, uint32_t progress_ms) const;
+  bool draw_preview_line(MatrixPanel_I2S_DMA* display) const;
   bool draw_glyph_line(MatrixPanel_I2S_DMA* display,
                        const String& text,
                        int start_x,
@@ -67,6 +70,7 @@ class LyricPlayer {
   std::vector<LyricLine> lines_;
 
   String loaded_song_;
+  String preview_text_;
   uint32_t duration_ms_ = 0;
   uint32_t progress_base_ms_ = 0;
   uint32_t progress_base_clock_ = 0;
