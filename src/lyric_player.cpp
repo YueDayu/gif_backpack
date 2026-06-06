@@ -92,7 +92,19 @@ bool LyricPlayer::load_font() {
   charset_file.close();
 
   glyphs_.clear();
-  glyphs_.reserve(charset.length());
+
+  int count_pos = 0;
+  size_t glyph_count = 0;
+  uint32_t expected_font_bytes = 0;
+  uint32_t count_codepoint = 0;
+  while (next_codepoint(charset, count_pos, count_codepoint)) {
+    glyph_count++;
+    expected_font_bytes += is_han(count_codepoint) ? 32 : 16;
+  }
+  if (expected_font_bytes > font_bytes_.size()) {
+    return false;
+  }
+  glyphs_.reserve(glyph_count);
 
   int pos = 0;
   uint32_t offset = 0;
@@ -111,9 +123,6 @@ bool LyricPlayer::load_font() {
     offset += byte_len;
   }
 
-  std::sort(glyphs_.begin(), glyphs_.end(), [](const Glyph& a, const Glyph& b) {
-    return a.codepoint < b.codepoint;
-  });
   return !glyphs_.empty() && offset <= font_bytes_.size();
 }
 
