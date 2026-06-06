@@ -439,9 +439,6 @@
       gifs: [],
       songs: [],
       lyrics: [],
-      glyphs: [],
-      glyphMap: new Map(),
-      fontBytes: new Uint8Array(),
       fontLoaded: false,
       durationMs: 0,
       currentMs: 0,
@@ -557,23 +554,6 @@
 
     async function loadFont() {
       if (state.fontLoaded) return;
-      const [charsetText, fontBuffer] = await Promise.all([
-        fetchText('/lyrics/charset.txt'),
-        fetchArrayBuffer('/lyrics/font.bin'),
-      ]);
-      state.fontBytes = new Uint8Array(fontBuffer);
-      state.glyphs = [];
-      state.glyphMap = new Map();
-
-      let offset = 0;
-      for (const ch of Array.from(charsetText)) {
-        const width = isHan(ch) ? 16 : 8;
-        const byteLength = width * 16 / 8;
-        const glyph = { ch, width, height: 16, offset, byteLength };
-        state.glyphMap.set(ch, glyph);
-        state.glyphs.push(glyph);
-        offset += byteLength;
-      }
       state.fontLoaded = true;
     }
 
@@ -814,29 +794,16 @@
 
     function drawGlyphLine(text, startX, startY, color) {
       ctx.fillStyle = color;
+      ctx.font = '16px "Hiragino Sans GB", "PingFang SC", "Microsoft YaHei", sans-serif';
+      ctx.textBaseline = 'top';
       let cursorX = startX;
       for (const ch of Array.from(text)) {
-        const glyph = state.glyphMap.get(ch);
-        const width = glyph?.width || 8;
-        if (glyph && cursorX < 64 && cursorX + width > 0) {
-          for (let y = 0; y < glyph.height; y++) {
-            const py = startY + y;
-            if (py < 0 || py >= 64) continue;
-            for (let x = 0; x < glyph.width; x++) {
-              const px = cursorX + x;
-              if (px < 0 || px >= 64) continue;
-              if (glyphBit(glyph, x, y)) ctx.fillRect(px, py, 1, 1);
-            }
-          }
+        const width = glyphWidth(ch);
+        if (cursorX < 64 && cursorX + width > 0) {
+          ctx.fillText(ch, Math.round(cursorX), Math.round(startY));
         }
         cursorX += width;
       }
-    }
-
-    function glyphBit(glyph, x, y) {
-      const bitIndex = y * glyph.width + x;
-      const byteOffset = glyph.offset + (bitIndex >> 3);
-      return (state.fontBytes[byteOffset] & (0x80 >> (bitIndex & 7))) !== 0;
     }
 
     function getScrollX(index, ms) {
@@ -853,7 +820,7 @@
     function getLineWidth(text) {
       let width = 0;
       for (const ch of Array.from(text)) {
-        width += state.glyphMap.get(ch)?.width || 8;
+        width += glyphWidth(ch);
       }
       return width;
     }
@@ -891,6 +858,10 @@
 
     function isHan(ch) {
       return /\p{Script=Han}/u.test(ch);
+    }
+
+    function glyphWidth(ch) {
+      return isHan(ch) ? 16 : 8;
     }
 
     function normalizeColor(value) {

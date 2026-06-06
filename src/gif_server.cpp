@@ -103,16 +103,23 @@ String base_name(const String& path) {
   return slash >= 0 ? path.substring(slash + 1) : path;
 }
 
+void add_common_http_headers(WebServer& server) {
+  server.sendHeader("Connection", "close");
+  server.sendHeader("Cache-Control", "no-store");
+}
+
 bool GifServer::init(std::function<void()> reload_callback) {
   reload_callback_ = reload_callback;
   server_index();
-  server_.serveStatic("/lyrics/", SPIFFS, "/lyrics/");
   server_.on("/filelist", HTTP_POST, [this]() { this->handle_filelist(); });
   server_.on("/gif", HTTP_GET, [this]() { this->handle_gif_file(); });
   server_.on(
       "/upload",
       HTTP_POST,
-      [this]() { this->server_.send(200, "text/plain", ""); },
+      [this]() {
+        add_common_http_headers(this->server_);
+        this->server_.send(200, "text/plain", "");
+      },
       [this]() { this->handle_upload(); });
   server_.on("/delete", HTTP_POST, [this]() { this->handle_delete(); });
   server_.on("/config", HTTP_POST, [this]() { this->handle_config(); });
@@ -130,11 +137,22 @@ void GifServer::handle_client() { server_.handleClient(); }
 
 void GifServer::server_index() {
   auto send_index = [this]() {
+    File gzip_file = SPIFFS.open("/web/index.html.gz", "r");
+    if (gzip_file) {
+      add_common_http_headers(server_);
+      server_.sendHeader("Content-Encoding", "gzip");
+      server_.streamFile(gzip_file, "text/html");
+      gzip_file.close();
+      return;
+    }
+
     File file = SPIFFS.open("/web/index.html", "r");
     if (!file) {
+      add_common_http_headers(server_);
       server_.send(404, "text/plain", "IndexNotFound");
       return;
     }
+    add_common_http_headers(server_);
     server_.streamFile(file, "text/html");
     file.close();
   };
@@ -146,10 +164,12 @@ void GifServer::handle_gif_file() {
   String gif_file = gif_basedir + '/' + server_.arg("img");
   if (exists(gif_file)) {
     File file = SPIFFS.open(gif_file, "r");
+    add_common_http_headers(server_);
     server_.streamFile(file, "image/gif");
     file.close();
     return;
   }
+  add_common_http_headers(server_);
   server_.send(404, "text/plain", "FileNotFound");
 }
 
@@ -175,6 +195,7 @@ void GifServer::handle_filelist() {
     is_first = false;
   }
   output += "]}";
+  add_common_http_headers(server_);
   server_.send(200, "text/json", output);
 }
 
@@ -201,10 +222,12 @@ void GifServer::handle_upload() {
 
 void GifServer::handle_delete() {
   if (server_.args() == 0) {
+    add_common_http_headers(server_);
     return server_.send(500, "text/plain", "BAD ARGS");
   }
   String path = gif_basedir + '/' + server_.arg(0);
   if (!exists(path)) {
+    add_common_http_headers(server_);
     return server_.send(404, "text/plain", "FileNotFound");
   }
   SPIFFS.remove(path);
@@ -217,6 +240,7 @@ void GifServer::handle_config() {
       reload_callback_();
     }
   }
+  add_common_http_headers(server_);
   server_.send(200, "text/plain", config_to_str());
 }
 
@@ -244,11 +268,13 @@ void GifServer::handle_api_gifs() {
     is_first = false;
   }
   output += "]}";
+  add_common_http_headers(server_);
   server_.send(200, "application/json", output);
 }
 
 void GifServer::handle_api_songs() {
   if (!exists(lyric_index_file)) {
+    add_common_http_headers(server_);
     server_.send(200, "application/json", "[]");
     return;
   }
@@ -293,11 +319,13 @@ void GifServer::handle_api_songs() {
   }
   index.close();
   output += "]";
+  add_common_http_headers(server_);
   server_.send(200, "application/json", output);
 }
 
 void GifServer::handle_api_lyric() {
   if (!server_.hasArg("file")) {
+    add_common_http_headers(server_);
     server_.send(400, "text/plain", "Missing file");
     return;
   }
@@ -306,6 +334,7 @@ void GifServer::handle_api_lyric() {
   const String direct_path = lyric_basedir + "/" + filename;
   if (exists(direct_path)) {
     File file = SPIFFS.open(direct_path, "r");
+    add_common_http_headers(server_);
     server_.streamFile(file, "text/plain; charset=utf-8");
     file.close();
     return;
@@ -313,6 +342,7 @@ void GifServer::handle_api_lyric() {
 
   File index = SPIFFS.open(lyric_index_file, "r");
   if (!index) {
+    add_common_http_headers(server_);
     server_.send(404, "text/plain", "LyricIndexNotFound");
     return;
   }
@@ -339,12 +369,14 @@ void GifServer::handle_api_lyric() {
   index.close();
 
   if (length == 0) {
+    add_common_http_headers(server_);
     server_.send(404, "text/plain", "LyricNotFound");
     return;
   }
 
   File pack = SPIFFS.open(lyric_pack_file, "r");
   if (!pack || !pack.seek(offset)) {
+    add_common_http_headers(server_);
     server_.send(404, "text/plain", "LyricPackNotFound");
     return;
   }
@@ -353,10 +385,12 @@ void GifServer::handle_api_lyric() {
   const size_t read_bytes = pack.readBytes(buffer.data(), length);
   pack.close();
   if (read_bytes != length) {
+    add_common_http_headers(server_);
     server_.send(500, "text/plain", "LyricReadFailed");
     return;
   }
   buffer[length] = '\0';
+  add_common_http_headers(server_);
   server_.send(200, "text/plain; charset=utf-8", buffer.data());
 }
 
@@ -448,5 +482,6 @@ void GifServer::handle_api_state() {
   output += ",\"y2\":";
   output += config.lyric_y2;
   output += "}";
+  add_common_http_headers(server_);
   server_.send(200, "application/json", output);
 }
