@@ -75,7 +75,9 @@ bool BleControl::begin(std::function<void()> reload_callback) {
       NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
 
   command_characteristic->setCallbacks(new CommandCallbacks(this));
-  state_characteristic_->setValue(build_state_line().c_str());
+  String init_state = build_state_line();
+  std::string init_value(init_state.c_str(), init_state.length());
+  state_characteristic_->setValue(init_value);
 
   service->start();
   NimBLEAdvertising* advertising = NimBLEDevice::getAdvertising();
@@ -388,7 +390,8 @@ void BleControl::flush_batch(String& batch) {
     batch = "";
     return;
   }
-  state_characteristic_->setValue(batch.c_str());
+  std::string data(batch.c_str(), batch.length());
+  state_characteristic_->setValue(data);
   state_characteristic_->notify();
   delay(kNotifyChunkDelayMs);
   batch = "";
@@ -536,15 +539,16 @@ void BleControl::notify_line(const String& line) {
 
   String payload = line + "\n";
   int offset = 0;
-  while (offset < payload.length()) {
+  while (offset < (int)payload.length()) {
     const int chunk_len = std::min<int>(kNotifyChunkSize, payload.length() - offset);
-    const String chunk = payload.substring(offset, offset + chunk_len);
-    state_characteristic_->setValue(chunk.c_str());
+    std::string chunk(payload.c_str() + offset, chunk_len);
+    state_characteristic_->setValue(chunk);
     state_characteristic_->notify();
     offset += chunk_len;
     delay(kNotifyChunkDelayMs);
   }
-  state_characteristic_->setValue(line.c_str());
+  std::string final_value(line.c_str(), line.length());
+  state_characteristic_->setValue(final_value);
 }
 
 String BleControl::build_state_line() const {
