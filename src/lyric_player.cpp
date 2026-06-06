@@ -41,9 +41,12 @@ void LyricPlayer::set_song_file(const String& filename) {
     return;
   }
   if (!load_song(loaded_song_)) {
+    Serial.println(String("LyricPlayer: load_song FAILED for: ") + loaded_song_ +
+                   " font_ready=" + (font_ready_ ? "Y" : "N"));
     clear_song();
     return;
   }
+  Serial.println(String("LyricPlayer: loaded ") + loaded_song_ + " lines=" + lines_.size());
   song_ready_ = true;
 }
 
