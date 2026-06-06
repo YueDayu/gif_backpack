@@ -46,6 +46,7 @@ void Configure::save() {
   preferences.putBool(PREF_ENABLE_DISPLAY, enable_display);
   preferences.putString(PREF_LYRIC_FILENAME, lyric_filename);
   preferences.putString(PREF_LYRIC_COLOR, lyric_color);
+  preferences.putString(PREF_LYRIC_NEXT_COLOR, lyric_next_color);
   preferences.putUInt(PREF_LYRIC_Y1, lyric_y1);
   preferences.putUInt(PREF_LYRIC_Y2, lyric_y2);
 }
@@ -60,6 +61,7 @@ void Configure::load() {
   enable_display = get_bool_or_default(preferences, PREF_ENABLE_DISPLAY, true);
   lyric_filename = get_string_or_default(preferences, PREF_LYRIC_FILENAME, "");
   lyric_color = get_string_or_default(preferences, PREF_LYRIC_COLOR, "#ffcc33");
+  lyric_next_color = get_string_or_default(preferences, PREF_LYRIC_NEXT_COLOR, "#7bdcff");
   lyric_y1 = get_uint_or_default(preferences, PREF_LYRIC_Y1, 12);
   lyric_y2 = get_uint_or_default(preferences, PREF_LYRIC_Y2, 36);
 }

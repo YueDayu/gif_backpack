@@ -26,6 +26,7 @@ class Configure {
   const char* const PREF_ENABLE_DISPLAY = "enable";
   const char* const PREF_LYRIC_FILENAME = "lyricFile";
   const char* const PREF_LYRIC_COLOR = "lyricColor";
+  const char* const PREF_LYRIC_NEXT_COLOR = "lyricNextColor";
   const char* const PREF_LYRIC_Y1 = "lyricY1";
   const char* const PREF_LYRIC_Y2 = "lyricY2";
 
@@ -38,6 +39,7 @@ class Configure {
   bool enable_display;
   String lyric_filename;
   String lyric_color;
+  String lyric_next_color;
   uint8_t lyric_y1;
   uint8_t lyric_y2;
 };

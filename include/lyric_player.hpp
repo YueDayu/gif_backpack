@@ -48,7 +48,8 @@ class LyricPlayer {
                         int line_index,
                         int first_line_x,
                         int y,
-                        uint16_t color) const;
+                        uint16_t current_color,
+                        uint16_t next_color) const;
 
   const Glyph* find_glyph(uint32_t codepoint) const;
   bool glyph_bit(const Glyph& glyph, uint8_t x, uint8_t y) const;

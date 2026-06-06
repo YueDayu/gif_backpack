@@ -2,8 +2,10 @@
 
 #include <NimBLEDevice.h>
 #include <Preferences.h>
+#include <SPIFFS.h>
 
 #include <algorithm>
+#include <cctype>
 
 #include "configure.hpp"
 #include "gif_player.hpp"
@@ -115,6 +117,22 @@ void BleControl::handle_command(const String& command) {
     handle_set_command(command.substring(4));
     return;
   }
+  if (command.startsWith("UPLOAD_BEGIN ")) {
+    handle_upload_begin(command.substring(13));
+    return;
+  }
+  if (command.startsWith("UPLOAD_DATA ")) {
+    handle_upload_data(command.substring(12));
+    return;
+  }
+  if (command == "UPLOAD_END") {
+    handle_upload_end();
+    return;
+  }
+  if (command == "UPLOAD_ABORT") {
+    handle_upload_abort();
+    return;
+  }
   notify_line("ERR unknown_command");
 }
 
@@ -162,6 +180,15 @@ void BleControl::handle_set_command(const String& args) {
     }
   }
 
+  value = arg_value(args, "nextColor");
+  if (value.length() > 0) {
+    value.trim();
+    if (value.length() == 7 && value.startsWith("#")) {
+      config.lyric_next_color = value;
+      needs_save = true;
+    }
+  }
+
   value = arg_value(args, "y1");
   if (value.length() > 0) {
     config.lyric_y1 = std::max<int>(0, std::min<int>(48, int(value.toInt())));
@@ -191,6 +218,112 @@ void BleControl::handle_set_command(const String& args) {
   }
 
   notify_state();
+}
+
+void BleControl::handle_upload_begin(const String& args) {
+  handle_upload_abort();
+
+  const String filename = sanitize_gif_filename(arg_value(args, "name"));
+  const uint32_t size = uint32_t(std::max<long>(0, arg_value(args, "size").toInt()));
+  if (filename.length() == 0 || size == 0) {
+    notify_line("ERR upload_bad_request");
+    return;
+  }
+
+  const size_t total = SPIFFS.totalBytes();
+  const size_t used = SPIFFS.usedBytes();
+  const size_t free_bytes = total > used ? total - used : 0;
+  if (size > free_bytes + 4096) {
+    notify_line("ERR upload_no_space");
+    return;
+  }
+
+  const String path = String("/gif/") + filename;
+  SPIFFS.remove(path);
+  upload_file_ = SPIFFS.open(path, "w");
+  if (!upload_file_) {
+    notify_line("ERR upload_open_failed");
+    return;
+  }
+
+  upload_filename_ = filename;
+  upload_expected_size_ = size;
+  upload_received_size_ = 0;
+  upload_active_ = true;
+  notify_line("UPLOAD_READY name=" + filename + "&size=" + String(size));
+}
+
+void BleControl::handle_upload_data(const String& args) {
+  if (!upload_active_ || !upload_file_) {
+    notify_line("ERR upload_not_active");
+    return;
+  }
+
+  std::vector<uint8_t> bytes;
+  if (!base64_decode(arg_value(args, "data"), bytes)) {
+    handle_upload_abort();
+    notify_line("ERR upload_bad_data");
+    return;
+  }
+  if (upload_received_size_ + bytes.size() > upload_expected_size_) {
+    handle_upload_abort();
+    notify_line("ERR upload_too_large");
+    return;
+  }
+
+  const size_t written = upload_file_.write(bytes.data(), bytes.size());
+  if (written != bytes.size()) {
+    handle_upload_abort();
+    notify_line("ERR upload_write_failed");
+    return;
+  }
+  upload_received_size_ += written;
+  notify_line("UPLOAD_PROGRESS received=" + String(upload_received_size_) +
+              "&size=" + String(upload_expected_size_));
+}
+
+void BleControl::handle_upload_end() {
+  if (!upload_active_ || !upload_file_) {
+    notify_line("ERR upload_not_active");
+    return;
+  }
+
+  upload_file_.close();
+  upload_active_ = false;
+  if (upload_received_size_ != upload_expected_size_) {
+    SPIFFS.remove(String("/gif/") + upload_filename_);
+    notify_line("ERR upload_size_mismatch");
+    upload_filename_ = "";
+    upload_expected_size_ = 0;
+    upload_received_size_ = 0;
+    return;
+  }
+
+  auto& config = Configure::instance();
+  config.gif_filename = upload_filename_;
+  config.save();
+  if (reload_callback_ != nullptr) {
+    reload_callback_();
+  }
+  notify_line("UPLOAD_DONE name=" + upload_filename_ +
+              "&size=" + String(upload_received_size_));
+  upload_filename_ = "";
+  upload_expected_size_ = 0;
+  upload_received_size_ = 0;
+  notify_state();
+}
+
+void BleControl::handle_upload_abort() {
+  if (upload_file_) {
+    upload_file_.close();
+  }
+  if (upload_active_ && upload_filename_.length() > 0) {
+    SPIFFS.remove(String("/gif/") + upload_filename_);
+  }
+  upload_active_ = false;
+  upload_filename_ = "";
+  upload_expected_size_ = 0;
+  upload_received_size_ = 0;
 }
 
 void BleControl::notify_state() {
@@ -229,10 +362,16 @@ String BleControl::build_state_line() const {
   output += LyricPlayer::instance().current_progress_ms();
   output += "&color=";
   output += config.lyric_color;
+  output += "&nextColor=";
+  output += config.lyric_next_color;
   output += "&y1=";
   output += config.lyric_y1;
   output += "&y2=";
   output += config.lyric_y2;
+  output += "&fsUsed=";
+  output += SPIFFS.usedBytes();
+  output += "&fsTotal=";
+  output += SPIFFS.totalBytes();
   return output;
 }
 
@@ -253,6 +392,26 @@ String BleControl::arg_value(const String& args, const char* key) {
   return "";
 }
 
+String BleControl::sanitize_gif_filename(const String& value) {
+  String output;
+  output.reserve(value.length());
+  for (int i = 0; i < value.length(); ++i) {
+    const char c = value[i];
+    if (std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '_' || c == '-') {
+      output += c;
+    } else if (c == ' ') {
+      output += '_';
+    }
+  }
+  if (!output.endsWith(".gif") && !output.endsWith(".GIF")) {
+    output += ".gif";
+  }
+  if (output.length() > 48) {
+    output = output.substring(output.length() - 48);
+  }
+  return output;
+}
+
 String BleControl::url_decode(const String& value) {
   String output;
   output.reserve(value.length());
@@ -271,4 +430,46 @@ String BleControl::url_decode(const String& value) {
     output += c;
   }
   return output;
+}
+
+bool BleControl::base64_decode(const String& input, std::vector<uint8_t>& output) {
+  output.clear();
+  int value = 0;
+  int bits = -8;
+  for (int i = 0; i < input.length(); ++i) {
+    const char c = input[i];
+    if (c == '=') {
+      break;
+    }
+    const int decoded = base64_value(c);
+    if (decoded < 0) {
+      return false;
+    }
+    value = (value << 6) | decoded;
+    bits += 6;
+    if (bits >= 0) {
+      output.push_back(uint8_t((value >> bits) & 0xff));
+      bits -= 8;
+    }
+  }
+  return true;
+}
+
+int BleControl::base64_value(char c) {
+  if (c >= 'A' && c <= 'Z') {
+    return c - 'A';
+  }
+  if (c >= 'a' && c <= 'z') {
+    return c - 'a' + 26;
+  }
+  if (c >= '0' && c <= '9') {
+    return c - '0' + 52;
+  }
+  if (c == '+') {
+    return 62;
+  }
+  if (c == '/') {
+    return 63;
+  }
+  return -1;
 }

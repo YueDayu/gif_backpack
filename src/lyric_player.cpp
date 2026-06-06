@@ -69,13 +69,14 @@ void LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
   }
 
   const auto& config = Configure::instance();
-  const uint16_t color = parse_color(display, config.lyric_color);
+  const uint16_t current_color = parse_color(display, config.lyric_color);
+  const uint16_t next_color = parse_color(display, config.lyric_next_color);
   const int y1 = std::max(0, std::min<int>(config.lyric_y1, kScreenHeight - kGlyphHeight));
   const int y2 = std::max(0, std::min<int>(config.lyric_y2, kScreenHeight - kGlyphHeight));
   const int first_line_x = scroll_x_for_line(line_index, progress_ms);
 
-  draw_glyph_line(display, lines_[line_index].text, first_line_x, y1, color);
-  draw_future_line(display, line_index, first_line_x, y2, color);
+  draw_glyph_line(display, lines_[line_index].text, first_line_x, y1, current_color);
+  draw_future_line(display, line_index, first_line_x, y2, current_color, next_color);
 }
 
 bool LyricPlayer::load_font() {
@@ -280,7 +281,10 @@ uint16_t LyricPlayer::text_width(const String& text) const {
 }
 
 int LyricPlayer::current_line_index(uint32_t progress_ms) const {
-  int index = -1;
+  if (lines_.empty()) {
+    return -1;
+  }
+  int index = 0;
   for (size_t i = 0; i < lines_.size(); ++i) {
     if (lines_[i].time_ms <= progress_ms) {
       index = static_cast<int>(i);
@@ -306,6 +310,9 @@ int LyricPlayer::scroll_x_for_line(int line_index, uint32_t progress_ms) const {
                               ? lines_[line_index + 1].time_ms
                               : duration_ms_;
   const uint32_t duration = std::max<uint32_t>(1500, end_ms - start_ms);
+  if (progress_ms <= start_ms) {
+    return 0;
+  }
   const float progress =
       std::max(0.0f, std::min(1.0f, float(progress_ms - start_ms) / float(duration)));
   const int overflow = line.width - kScreenWidth;
@@ -348,10 +355,11 @@ void LyricPlayer::draw_future_line(MatrixPanel_I2S_DMA* display,
                                    int line_index,
                                    int first_line_x,
                                    int y,
-                                   uint16_t color) const {
+                                   uint16_t current_color,
+                                   uint16_t next_color) const {
   const LyricLine& line = lines_[line_index];
   const int second_line_x = first_line_x - kScreenWidth;
-  draw_glyph_line(display, line.text, second_line_x, y, color);
+  draw_glyph_line(display, line.text, second_line_x, y, current_color);
 
   if (line_index + 1 >= static_cast<int>(lines_.size())) {
     return;
@@ -360,7 +368,7 @@ void LyricPlayer::draw_future_line(MatrixPanel_I2S_DMA* display,
   const int current_tail_right = second_line_x + line.width;
   const int next_start_x = std::max(0, current_tail_right + 4);
   if (next_start_x < kScreenWidth) {
-    draw_glyph_line(display, lines_[line_index + 1].text, next_start_x, y, color);
+    draw_glyph_line(display, lines_[line_index + 1].text, next_start_x, y, next_color);
   }
 }
 
