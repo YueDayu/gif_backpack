@@ -15,6 +15,7 @@ GifServer server(80);
 void server_task(void*) {
   while (true) {
     server.handle_client();
+    delay(1);
   }
 }
 

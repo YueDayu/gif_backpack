@@ -442,6 +442,7 @@
       glyphs: [],
       glyphMap: new Map(),
       fontBytes: new Uint8Array(),
+      fontLoaded: false,
       durationMs: 0,
       currentMs: 0,
       playing: false,
@@ -517,12 +518,13 @@
 
     async function init() {
       try {
-        await Promise.all([loadFont(), refreshState(), refreshGifs(), refreshSongs()]);
-        if (state.device.song) {
-          await loadSong(state.device.song);
-        }
-        setLocalTime(state.device.progressMs || 0);
+        await refreshState();
         renderAll();
+        await refreshGifs();
+        renderGifs();
+        await refreshSongs();
+        renderSongs();
+        setLocalTime(state.device.progressMs || 0);
       } catch (err) {
         alert(String(err));
       }
@@ -544,6 +546,7 @@
     }
 
     async function loadFont() {
+      if (state.fontLoaded) return;
       const [charsetText, fontBuffer] = await Promise.all([
         fetchText('/lyrics/charset.txt'),
         fetchArrayBuffer('/lyrics/font.bin'),
@@ -561,6 +564,7 @@
         state.glyphs.push(glyph);
         offset += byteLength;
       }
+      state.fontLoaded = true;
     }
 
     async function loadSong(filename) {
@@ -576,6 +580,15 @@
       state.activeLine = -1;
       els.seek.max = String(state.durationMs);
       renderTimeline(true);
+    }
+
+    async function ensurePreviewAssets(filename = state.device.song) {
+      if (!filename) return false;
+      await loadFont();
+      if (!state.lyrics.length || state.device.song !== filename) {
+        await loadSong(filename);
+      }
+      return state.lyrics.length > 0;
     }
 
     async function saveState(patch) {
@@ -598,6 +611,7 @@
     async function selectSong(filename) {
       stopPreview();
       await saveState({ song: filename, progress: '0' });
+      await loadFont();
       await loadSong(filename);
       setLocalTime(0);
       startPreview();
@@ -605,6 +619,10 @@
     }
 
     async function syncProgress(ms) {
+      if (!state.lyrics.length) {
+        const ready = await ensurePreviewAssets();
+        if (!ready) return;
+      }
       const clamped = clamp(Math.round(ms), 0, state.durationMs);
       setLocalTime(clamped);
       await saveState({ progress: String(clamped) });
@@ -619,7 +637,12 @@
     }
 
     function startPreview() {
-      if (!state.lyrics.length) return;
+      if (!state.lyrics.length) {
+        ensurePreviewAssets().then((ready) => {
+          if (ready) startPreview();
+        }).catch((err) => alert(String(err)));
+        return;
+      }
       state.playing = true;
       state.playStartedAt = performance.now();
       state.playBaseMs = state.currentMs;
@@ -679,8 +702,8 @@
       const song = findSong(state.device.song);
       els.songLabel.textContent = song ? song.title : (state.device.song || '未选择');
       els.seek.max = String(state.durationMs);
-      els.playToggle.disabled = !state.lyrics.length;
-      els.syncProgress.disabled = !state.lyrics.length;
+      els.playToggle.disabled = !state.device.song;
+      els.syncProgress.disabled = !state.device.song;
     }
 
     function renderGifs() {
