@@ -22,6 +22,7 @@ class Configure {
   const char* const PREF_DISPLAY_ABC_MAX = "autoBrightMax";
   const char* const PREF_WIFI_SSID = "wifiSsid";
   const char* const PREF_WIFI_PASSWORD = "wifiPwd";
+  const char* const PREF_DISPLAY_MODE = "displayMode";
   const char* const PREF_GIF_FILENAME = "filename";
   const char* const PREF_ENABLE_DISPLAY = "enable";
   const char* const PREF_LYRIC_FILENAME = "lyricFile";
@@ -35,6 +36,7 @@ class Configure {
   uint16_t auto_bright_max;
   String wifi_ssid;
   String wifi_pwd;
+  String display_mode;
   String gif_filename;
   bool enable_display;
   String lyric_filename;

@@ -156,6 +156,12 @@ void BleControl::handle_set_command(const String& args) {
     needs_save = true;
   }
 
+  value = arg_value(args, "mode");
+  if ((value == "gif" || value == "lyrics") && value != config.display_mode) {
+    config.display_mode = value;
+    needs_save = true;
+  }
+
   value = arg_value(args, "gif");
   if (value.length() > 0 && value != config.gif_filename) {
     config.gif_filename = value == "-" ? "" : value;
@@ -362,6 +368,8 @@ String BleControl::build_state_line() const {
   output += config.display_bright;
   output += "&enable=";
   output += config.enable_display ? "1" : "0";
+  output += "&mode=";
+  output += config.display_mode;
   output += "&gif=";
   output += config.gif_filename.length() ? config.gif_filename : "-";
   output += "&song=";

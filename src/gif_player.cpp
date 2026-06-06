@@ -31,6 +31,7 @@ void GifPlayer::set_gif_file(const String& filename) {
 void GifPlayer::update() {
   constexpr uint32_t kStaticFrameIntervalMs = 33;
   const auto& config = Configure::instance();
+  const bool lyric_mode = config.display_mode == "lyrics";
   if (config.display_bright != cur_brightness_) {
     cur_brightness_ = config.display_bright;
     uint8_t real_brightness = float(cur_brightness_) / 100. * 233.;
@@ -41,7 +42,41 @@ void GifPlayer::update() {
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
     static_frame_dirty_ = true;
     return;
-  } else if (need_reopen_) {
+  }
+
+  if (lyric_mode) {
+    if (opened_) {
+      gif_.close();
+      opened_ = false;
+    }
+    const uint32_t now = millis();
+    if (!static_frame_dirty_ && now - last_static_draw_ms_ < kStaticFrameIntervalMs) {
+      return;
+    }
+    dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+    LyricPlayer::instance().draw(dma_display_);
+    static_frame_dirty_ = false;
+    last_static_draw_ms_ = now;
+    return;
+  }
+
+  if (cur_filename_.length() == 0) {
+    if (opened_) {
+      gif_.close();
+      opened_ = false;
+    }
+    if (static_frame_dirty_) {
+      dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+      static_frame_dirty_ = false;
+    }
+    return;
+  }
+
+  if (!opened_ && !need_reopen_) {
+    need_reopen_ = true;
+  }
+
+  if (need_reopen_) {
     if (opened_) {
       gif_.close();
     }
@@ -68,18 +103,12 @@ void GifPlayer::update() {
   }
 
   if (!opened_) {
-    const uint32_t now = millis();
-    if (!static_frame_dirty_ && now - last_static_draw_ms_ < kStaticFrameIntervalMs) {
-      return;
+    if (static_frame_dirty_) {
+      dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+      static_frame_dirty_ = false;
     }
-    dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
-    LyricPlayer::instance().draw(dma_display_);
-    static_frame_dirty_ = false;
-    last_static_draw_ms_ = now;
     return;
   }
-
-  LyricPlayer::instance().draw(dma_display_);
 }
 
 void GifPlayer::setup_display() {

@@ -42,6 +42,7 @@ void Configure::save() {
   preferences.putUInt(PREF_DISPLAY_ABC_MAX, auto_bright_max);
   preferences.putString(PREF_WIFI_SSID, wifi_ssid);
   preferences.putString(PREF_WIFI_PASSWORD, wifi_pwd);
+  preferences.putString(PREF_DISPLAY_MODE, display_mode);
   preferences.putString(PREF_GIF_FILENAME, gif_filename);
   preferences.putBool(PREF_ENABLE_DISPLAY, enable_display);
   preferences.putString(PREF_LYRIC_FILENAME, lyric_filename);
@@ -57,6 +58,10 @@ void Configure::load() {
   auto_bright_max = get_uint_or_default(preferences, PREF_DISPLAY_ABC_MAX, 0);
   wifi_ssid = get_string_or_default(preferences, PREF_WIFI_SSID, "gif_backpack");
   wifi_pwd = get_string_or_default(preferences, PREF_WIFI_PASSWORD, "12345678");
+  display_mode = get_string_or_default(preferences, PREF_DISPLAY_MODE, "gif");
+  if (display_mode != "gif" && display_mode != "lyrics") {
+    display_mode = "gif";
+  }
   gif_filename = get_string_or_default(preferences, PREF_GIF_FILENAME, "bobo.gif");
   enable_display = get_bool_or_default(preferences, PREF_ENABLE_DISPLAY, true);
   lyric_filename = get_string_or_default(preferences, PREF_LYRIC_FILENAME, "");
