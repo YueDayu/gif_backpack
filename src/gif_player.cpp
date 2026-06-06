@@ -24,18 +24,23 @@ void GifPlayer::set_gif_file(const String& filename) {
   if (filename != cur_filename_) {
     cur_filename_ = filename;
     need_reopen_ = true;
+    static_frame_dirty_ = true;
   }
 }
 
 void GifPlayer::update() {
+  constexpr uint32_t kStaticFrameIntervalMs = 33;
   const auto& config = Configure::instance();
   if (config.display_bright != cur_brightness_) {
     cur_brightness_ = config.display_bright;
     uint8_t real_brightness = float(cur_brightness_) / 100. * 233.;
     dma_display_->setBrightness8(real_brightness);
+    static_frame_dirty_ = true;
   }
   if (!config.enable_display) {
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+    static_frame_dirty_ = true;
+    return;
   } else if (need_reopen_) {
     if (opened_) {
       gif_.close();
@@ -62,12 +67,19 @@ void GifPlayer::update() {
     }
   }
 
-  if (config.enable_display) {
-    if (!opened_) {
-      dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
+  if (!opened_) {
+    const uint32_t now = millis();
+    if (!static_frame_dirty_ && now - last_static_draw_ms_ < kStaticFrameIntervalMs) {
+      return;
     }
+    dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
     LyricPlayer::instance().draw(dma_display_);
+    static_frame_dirty_ = false;
+    last_static_draw_ms_ = now;
+    return;
   }
+
+  LyricPlayer::instance().draw(dma_display_);
 }
 
 void GifPlayer::setup_display() {

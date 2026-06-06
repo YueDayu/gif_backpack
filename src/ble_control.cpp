@@ -140,6 +140,7 @@ void BleControl::handle_set_command(const String& args) {
   auto& config = Configure::instance();
   bool needs_save = false;
   bool needs_reload = false;
+  bool song_specified = false;
   bool has_progress = false;
   uint32_t requested_progress = LyricPlayer::instance().current_progress_ms();
 
@@ -163,12 +164,16 @@ void BleControl::handle_set_command(const String& args) {
   }
 
   value = arg_value(args, "song");
-  if (value.length() > 0 && value != config.lyric_filename) {
-    config.lyric_filename = value == "-" ? "" : value;
+  if (value.length() > 0) {
+    song_specified = true;
+    const String lyric_filename = value == "-" ? "" : value;
+    if (lyric_filename != config.lyric_filename) {
+      config.lyric_filename = lyric_filename;
+      needs_save = true;
+      needs_reload = true;
+    }
     requested_progress = 0;
     has_progress = true;
-    needs_save = true;
-    needs_reload = true;
   }
 
   value = arg_value(args, "color");
@@ -212,6 +217,9 @@ void BleControl::handle_set_command(const String& args) {
   }
   if (needs_reload && reload_callback_ != nullptr) {
     reload_callback_();
+  }
+  if (song_specified && !needs_reload) {
+    LyricPlayer::instance().set_song_file(config.lyric_filename);
   }
   if (has_progress) {
     LyricPlayer::instance().set_progress(requested_progress);
@@ -372,6 +380,12 @@ String BleControl::build_state_line() const {
   output += SPIFFS.usedBytes();
   output += "&fsTotal=";
   output += SPIFFS.totalBytes();
+  output += "&fontReady=";
+  output += LyricPlayer::instance().font_ready() ? "1" : "0";
+  output += "&lyricReady=";
+  output += LyricPlayer::instance().song_ready() ? "1" : "0";
+  output += "&lyricLines=";
+  output += LyricPlayer::instance().line_count();
   return output;
 }
 

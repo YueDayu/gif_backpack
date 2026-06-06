@@ -14,7 +14,10 @@ class LyricPlayer {
   void set_song_file(const String& filename);
   void set_progress(uint32_t progress_ms);
   uint32_t current_progress_ms() const;
-  void draw(MatrixPanel_I2S_DMA* display);
+  bool draw(MatrixPanel_I2S_DMA* display);
+  bool font_ready() const { return font_ready_; }
+  bool song_ready() const { return song_ready_; }
+  size_t line_count() const { return lines_.size(); }
 
  private:
   struct Glyph {
@@ -68,4 +71,5 @@ class LyricPlayer {
   uint32_t progress_base_ms_ = 0;
   uint32_t progress_base_clock_ = 0;
   bool font_ready_ = false;
+  bool song_ready_ = false;
 };

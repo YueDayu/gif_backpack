@@ -29,6 +29,8 @@ class GifPlayer {
   String cur_filename_;
   bool opened_ = false;
   bool need_reopen_ = false;
+  bool static_frame_dirty_ = true;
+  uint32_t last_static_draw_ms_ = 0;
   uint8_t cur_brightness_;
 
   MatrixPanel_I2S_DMA* dma_display_ = nullptr;

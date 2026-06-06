@@ -29,10 +29,11 @@ bool LyricPlayer::init() {
 }
 
 void LyricPlayer::set_song_file(const String& filename) {
-  if (filename == loaded_song_) {
+  if (filename == loaded_song_ && (filename.length() == 0 || song_ready_)) {
     return;
   }
   loaded_song_ = filename;
+  song_ready_ = false;
   progress_base_ms_ = 0;
   progress_base_clock_ = millis();
   if (loaded_song_.length() == 0) {
@@ -41,7 +42,9 @@ void LyricPlayer::set_song_file(const String& filename) {
   }
   if (!load_song(loaded_song_)) {
     clear_song();
+    return;
   }
+  song_ready_ = true;
 }
 
 void LyricPlayer::set_progress(uint32_t progress_ms) {
@@ -57,15 +60,15 @@ uint32_t LyricPlayer::current_progress_ms() const {
   return std::min(progress_base_ms_ + elapsed, duration_ms_);
 }
 
-void LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
+bool LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
   if (!display || !font_ready_ || lines_.empty()) {
-    return;
+    return false;
   }
 
   const uint32_t progress_ms = current_progress_ms();
   const int line_index = current_line_index(progress_ms);
   if (line_index < 0) {
-    return;
+    return false;
   }
 
   const auto& config = Configure::instance();
@@ -77,6 +80,7 @@ void LyricPlayer::draw(MatrixPanel_I2S_DMA* display) {
 
   draw_glyph_line(display, lines_[line_index].text, first_line_x, y1, current_color);
   draw_future_line(display, line_index, first_line_x, y2, current_color, next_color);
+  return true;
 }
 
 bool LyricPlayer::load_font() {
@@ -267,6 +271,7 @@ void LyricPlayer::clear_song() {
   duration_ms_ = 0;
   progress_base_ms_ = 0;
   progress_base_clock_ = millis();
+  song_ready_ = false;
 }
 
 uint16_t LyricPlayer::text_width(const String& text) const {
