@@ -31,7 +31,7 @@ class GifPlayer {
   bool opened_ = false;
   bool need_reopen_ = false;
   bool static_frame_dirty_ = true;
-  bool double_buffer_enabled_ = false;
+  bool double_buffer_enabled_ = true;
   uint32_t last_static_draw_ms_ = 0;
   uint8_t cur_brightness_;
 
