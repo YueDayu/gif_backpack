@@ -512,8 +512,10 @@ void BleControl::handle_lyric_request(const String& args) {
   }
 
   notify_line("LYRIC_BEGIN file=" + url_encode(filename));
+  String batch;
+  batch.reserve(kNotifyChunkSize);
   int pos = 0;
-  while (pos < text.length()) {
+  while (pos < (int)text.length()) {
     int next_newline = text.indexOf('\n', pos);
     if (next_newline < 0) {
       next_newline = text.length();
@@ -521,9 +523,16 @@ void BleControl::handle_lyric_request(const String& args) {
     String line = text.substring(pos, next_newline);
     line.trim();
     if (line.length() > 0) {
-      notify_line("LYRIC_TEXT line=" + url_encode(line));
+      String entry = "LYRIC_TEXT line=" + url_encode(line) + "\n";
+      if (batch.length() + entry.length() > kNotifyChunkSize) {
+        flush_batch(batch);
+      }
+      batch += entry;
     }
     pos = next_newline + 1;
+  }
+  if (batch.length() > 0) {
+    flush_batch(batch);
   }
   notify_line("LYRIC_END file=" + url_encode(filename));
 }
