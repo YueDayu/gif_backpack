@@ -384,33 +384,49 @@ void BleControl::handle_upload_abort() {
 }
 
 void BleControl::handle_gif_list_request() {
-  File root = SPIFFS.open("/");
+  File root = SPIFFS.open("/gif");
   if (!root) {
-    notify_line("ERR gifs_dir_missing");
-    return;
+    root = SPIFFS.open("/");
   }
 
   notify_line("GIFS_BEGIN");
   size_t count = 0;
-  File file = root.openNextFile();
-  while (file) {
-    String path = file.name();
-    String name = path;
-    const int slash = name.lastIndexOf('/');
-    if (slash >= 0) {
-      name = name.substring(slash + 1);
+  if (root) {
+    File file = root.openNextFile();
+    while (file) {
+      String path = file.name();
+      String name = path;
+      const int slash = name.lastIndexOf('/');
+      if (slash >= 0) {
+        name = name.substring(slash + 1);
+      }
+      String lower_name = name;
+      lower_name.toLowerCase();
+      if (!file.isDirectory() && lower_name.endsWith(".gif")) {
+        notify_line("GIF file=" + url_encode(name));
+        count++;
+      }
+      file.close();
+      file = root.openNextFile();
     }
-    String lower_name = name;
-    lower_name.toLowerCase();
-    const bool in_gif_dir = path.startsWith("/gif/") || path.startsWith("gif/");
-    if (!file.isDirectory() && in_gif_dir && lower_name.endsWith(".gif")) {
-      notify_line("GIF file=" + url_encode(name));
-      count++;
-    }
-    file.close();
-    file = root.openNextFile();
+    root.close();
   }
-  root.close();
+
+  if (count == 0) {
+    const char* known_gifs[] = {"/gif/bobo.gif", "/gif/cat.gif"};
+    for (const char* path : known_gifs) {
+      if (SPIFFS.exists(path)) {
+        String name = path;
+        const int slash = name.lastIndexOf('/');
+        if (slash >= 0) {
+          name = name.substring(slash + 1);
+        }
+        notify_line("GIF file=" + url_encode(name));
+        count++;
+      }
+    }
+  }
+
   Serial.println(String("BLE gifs count: ") + count);
   notify_line("GIFS_END count=" + String(count));
 }
