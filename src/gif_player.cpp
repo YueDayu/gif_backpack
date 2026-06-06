@@ -1,5 +1,7 @@
 #include "gif_player.hpp"
 
+#include <algorithm>
+
 #include "configure.hpp"
 #include "lyric_player.hpp"
 
@@ -7,6 +9,14 @@ const int panel_res_x = 64;
 const int panel_res_y = 64;
 const int panel_chain = 1;
 const String gif_basedir = "/gif";
+
+uint8_t scaled_brightness(uint8_t percent) {
+  if (percent == 0) {
+    return 24;
+  }
+  const int value = int(float(percent) / 100.0f * 233.0f);
+  return uint8_t(std::max(24, std::min(233, value)));
+}
 
 GifPlayer& GifPlayer::instance() {
   static GifPlayer player;
@@ -34,8 +44,7 @@ void GifPlayer::update() {
   const bool lyric_mode = config.display_mode == "lyrics";
   if (config.display_bright != cur_brightness_) {
     cur_brightness_ = config.display_bright;
-    uint8_t real_brightness = float(cur_brightness_) / 100. * 233.;
-    dma_display_->setBrightness8(real_brightness);
+    dma_display_->setBrightness8(scaled_brightness(cur_brightness_));
     static_frame_dirty_ = true;
   }
   if (!config.enable_display) {
@@ -54,7 +63,9 @@ void GifPlayer::update() {
       return;
     }
     dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
-    LyricPlayer::instance().draw(dma_display_);
+    if (!LyricPlayer::instance().draw(dma_display_)) {
+      draw_lyric_diagnostic();
+    }
     static_frame_dirty_ = false;
     last_static_draw_ms_ = now;
     return;
@@ -121,13 +132,30 @@ void GifPlayer::setup_display() {
   dma_display_ = new MatrixPanel_I2S_DMA(mxconfig);
   dma_display_->begin();
   cur_brightness_ = Configure::instance().display_bright;
-  dma_display_->setBrightness8(cur_brightness_);
+  dma_display_->setBrightness8(scaled_brightness(cur_brightness_));
   dma_display_->clearScreen();
   dma_display_->setRotation(2);
   dma_display_->fillScreen(dma_display_->color565(0, 0, 0));
 }
 
 void GifPlayer::setup_gif() { gif_.begin(LITTLE_ENDIAN_PIXELS); }
+
+void GifPlayer::draw_lyric_diagnostic() {
+  const auto& lyric = LyricPlayer::instance();
+  uint16_t color = dma_display_->color565(0, 180, 255);
+  if (!lyric.font_ready()) {
+    color = dma_display_->color565(255, 0, 0);
+  } else if (!lyric.song_ready() || lyric.line_count() == 0) {
+    color = dma_display_->color565(255, 180, 0);
+  }
+  dma_display_->drawRect(0, 0, 64, 64, color);
+  dma_display_->drawRect(2, 2, 60, 60, color);
+  dma_display_->fillRect(6, 6, 10, 10, color);
+  dma_display_->fillRect(24, 6, 10, 10, dma_display_->color565(255, 255, 255));
+  dma_display_->fillRect(42, 6, 10, 10, color);
+  dma_display_->drawLine(8, 28, 55, 28, color);
+  dma_display_->drawLine(8, 40, 55, 40, color);
+}
 
 void* GifPlayer::gif_open_file(const char* filename, int32_t* p_size) {
   instance().gif_file_ = SPIFFS.open(filename);

@@ -42,12 +42,12 @@ class LyricPlayer {
   uint16_t text_width(const String& text) const;
   int current_line_index(uint32_t progress_ms) const;
   int scroll_x_for_line(int line_index, uint32_t progress_ms) const;
-  void draw_glyph_line(MatrixPanel_I2S_DMA* display,
+  bool draw_glyph_line(MatrixPanel_I2S_DMA* display,
                        const String& text,
                        int start_x,
                        int start_y,
                        uint16_t color) const;
-  void draw_future_line(MatrixPanel_I2S_DMA* display,
+  bool draw_future_line(MatrixPanel_I2S_DMA* display,
                         int line_index,
                         int first_line_x,
                         int y,
