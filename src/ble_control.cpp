@@ -383,6 +383,22 @@ void BleControl::handle_upload_abort() {
   upload_received_size_ = 0;
 }
 
+void BleControl::flush_batch(String& batch) {
+  if (state_characteristic_ == nullptr || batch.length() == 0) {
+    batch = "";
+    return;
+  }
+  state_characteristic_->setValue(batch.c_str());
+  bool sent = state_characteristic_->notify();
+  if (!sent) {
+    delay(50);
+    state_characteristic_->setValue(batch.c_str());
+    state_characteristic_->notify();
+  }
+  delay(kNotifyChunkDelayMs);
+  batch = "";
+}
+
 void BleControl::handle_gif_list_request() {
   File root = SPIFFS.open("/gif");
   if (!root) {
@@ -391,6 +407,8 @@ void BleControl::handle_gif_list_request() {
 
   notify_line("GIFS_BEGIN");
   size_t count = 0;
+  String batch;
+  batch.reserve(kNotifyChunkSize);
   if (root) {
     File file = root.openNextFile();
     while (file) {
@@ -403,7 +421,11 @@ void BleControl::handle_gif_list_request() {
       String lower_name = name;
       lower_name.toLowerCase();
       if (!file.isDirectory() && lower_name.endsWith(".gif")) {
-        notify_line("GIF file=" + url_encode(name));
+        String entry = "GIF file=" + url_encode(name) + "\n";
+        if (batch.length() + entry.length() > kNotifyChunkSize) {
+          flush_batch(batch);
+        }
+        batch += entry;
         count++;
       }
       file.close();
@@ -421,12 +443,19 @@ void BleControl::handle_gif_list_request() {
         if (slash >= 0) {
           name = name.substring(slash + 1);
         }
-        notify_line("GIF file=" + url_encode(name));
+        String entry = "GIF file=" + url_encode(name) + "\n";
+        if (batch.length() + entry.length() > kNotifyChunkSize) {
+          flush_batch(batch);
+        }
+        batch += entry;
         count++;
       }
     }
   }
 
+  if (batch.length() > 0) {
+    flush_batch(batch);
+  }
   Serial.println(String("BLE gifs count: ") + count);
   notify_line("GIFS_END count=" + String(count));
 }
@@ -440,6 +469,8 @@ void BleControl::handle_song_list_request() {
 
   notify_line("SONGS_BEGIN");
   size_t count = 0;
+  String batch;
+  batch.reserve(kNotifyChunkSize);
   while (index.available()) {
     String line = index.readStringUntil('\n');
     line.trim();
@@ -454,8 +485,15 @@ void BleControl::handle_song_list_request() {
     }
     const String filename = line.substring(0, first_tab);
     const String title = line.substring(third_tab + 1);
-    notify_line("SONG file=" + url_encode(filename) + "&title=" + url_encode(title));
+    String entry = "SONG file=" + url_encode(filename) + "&title=" + url_encode(title) + "\n";
+    if (batch.length() + entry.length() > kNotifyChunkSize) {
+      flush_batch(batch);
+    }
+    batch += entry;
     count++;
+  }
+  if (batch.length() > 0) {
+    flush_batch(batch);
   }
   index.close();
   Serial.println(String("BLE songs count: ") + count);
@@ -507,8 +545,13 @@ void BleControl::notify_line(const String& line) {
     const int chunk_len = std::min<int>(kNotifyChunkSize, payload.length() - offset);
     const String chunk = payload.substring(offset, offset + chunk_len);
     state_characteristic_->setValue(chunk.c_str());
-    state_characteristic_->notify();
+    bool sent = state_characteristic_->notify();
     offset += chunk_len;
+    if (!sent) {
+      delay(50);
+      state_characteristic_->setValue(chunk.c_str());
+      state_characteristic_->notify();
+    }
     delay(kNotifyChunkDelayMs);
   }
   state_characteristic_->setValue(line.c_str());

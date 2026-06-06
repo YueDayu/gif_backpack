@@ -29,6 +29,7 @@ class BleControl {
   void handle_song_list_request();
   void handle_lyric_request(const String& args);
   void notify_line(const String& line);
+  void flush_batch(String& batch);
   String build_state_line() const;
 
   static String arg_value(const String& args, const char* key);
