@@ -245,11 +245,14 @@ bool LyricPlayer::load_song(const String& filename) {
 bool LyricPlayer::read_song_text(const String& filename, String& text) const {
   String direct_path = String(kLyricBaseDir) + "/" + filename;
   File direct = SPIFFS.open(direct_path, "r");
-  if (direct) {
+  if (direct && direct.size() > 0) {
     text = direct.readString();
     direct.close();
     Serial.println(String("read_song_text: direct file ok, len=") + text.length());
     return text.length() > 0;
+  }
+  if (direct) {
+    direct.close();
   }
 
   File index = SPIFFS.open(kLyricIndexFile, "r");
